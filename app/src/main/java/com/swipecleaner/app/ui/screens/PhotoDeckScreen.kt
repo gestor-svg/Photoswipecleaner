@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import com.swipecleaner.app.domain.BucketFolder
+import com.swipecleaner.app.domain.PhotoItem
 import com.swipecleaner.app.domain.SwipeDirection
 import com.swipecleaner.app.ui.trash.rememberTrashOrchestrator
 import java.util.Locale
@@ -36,6 +37,17 @@ fun PhotoDeckScreen(
 
     val trashAction = rememberTrashOrchestrator(
         onFinished = { deletedCount -> viewModel.onTrashConfirmed(deletedCount) }
+    )
+
+    // Segundo orquestador, dedicado al lote de archivos dañados del banner.
+    // Se guarda una copia (snapshot) del lote enviado porque para cuando el
+    // resultado llega, el estado ya pudo haber cambiado.
+    var pendingCorruptedBatch by remember { mutableStateOf<List<PhotoItem>>(emptyList()) }
+    val corruptedTrashAction = rememberTrashOrchestrator(
+        onFinished = { deletedCount ->
+            viewModel.onCorruptedTrashConfirmed(pendingCorruptedBatch, deletedCount)
+            pendingCorruptedBatch = emptyList()
+        }
     )
 
     // Diálogo de confirmación al salir con fotos marcadas pendientes.
@@ -78,6 +90,10 @@ fun PhotoDeckScreen(
     // Disparador de swipe manual desde los botones ✕/✓.
     var manualSwipe by remember { mutableStateOf<SwipeDecision?>(null) }
 
+    // El banner de dañados se resetea a "visible" cada vez que cambia la
+    // lista (nuevo hallazgo del escaneo, o se vació al enviarlos).
+    var corruptedBannerDismissed by remember(loaded?.corruptedPhotos) { mutableStateOf(false) }
+
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(folder.name) },
@@ -110,6 +126,18 @@ fun PhotoDeckScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+            }
+
+            val corrupted = loaded?.corruptedPhotos.orEmpty()
+            if (corrupted.isNotEmpty() && !corruptedBannerDismissed) {
+                CorruptedFilesBanner(
+                    count = corrupted.size,
+                    onSend = {
+                        pendingCorruptedBatch = corrupted
+                        corruptedTrashAction(corrupted)
+                    },
+                    onDismiss = { corruptedBannerDismissed = true }
+                )
             }
 
             Box(
@@ -202,6 +230,37 @@ fun PhotoDeckScreen(
 }
 
 /**
+ * Banner que avisa cuando el escaneo en segundo plano encontró archivos
+ * dañados/ilegibles. No bloquea el swipe: aparece mientras el usuario ya
+ * está deslizando. "Ignorar" solo lo oculta visualmente (no borra nada,
+ * no descarta el hallazgo del estado).
+ */
+@Composable
+private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(
+                "$count archivo${if (count == 1) "" else "s"} dañado${if (count == 1) "" else "s"} encontrado${if (count == 1) "" else "s"}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "No se pueden leer, por lo que no se pueden reparar ni recuperar.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(Modifier.height(8.dp))
+            Row {
+                Button(onClick = onSend) { Text("Enviar a la papelera") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onDismiss) { Text("Ignorar") }
+            }
+        }
+    }
+}
+
+/**
  * Imagen de la tarjeta con manejo de error de Coil: si el archivo está dañado
  * o no se puede decodificar, muestra un placeholder en vez de una tarjeta en
  * blanco o un posible crash. El usuario decide qué hacer (normalmente swipe
@@ -210,7 +269,7 @@ fun PhotoDeckScreen(
 @Composable
 private fun PhotoCardImage(uri: android.net.Uri, contentDescription: String?) {
     val painter = rememberAsyncImagePainter(uri)
-   val painterState = painter.state
+    val painterState = painter.state
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
