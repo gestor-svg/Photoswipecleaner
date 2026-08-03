@@ -16,13 +16,22 @@ import kotlin.math.roundToInt
 
 enum class SwipeDecision { LEFT, RIGHT }
 
+/**
+ * Cada click en los botones manuales genera una solicitud con un `token`
+ * único (incremental), no solo la dirección. Así dos clicks seguidos con la
+ * misma dirección (ej. ✕ luego ✕) siempre son valores distintos y siempre
+ * disparan una nueva animación — corrige el bug donde el botón dejaba de
+ * responder tras varios clicks rápidos (el token viejo podía quedar
+ * "atorado" porque dos clicks iguales no generaban un cambio detectable).
+ */
+data class ManualSwipeRequest(val decision: SwipeDecision, val token: Int)
+
 private const val SWIPE_THRESHOLD_DP = 120
 private const val EXIT_DISTANCE_DP = 500
 
 @Composable
 fun SwipeableCard(
-    manualTrigger: SwipeDecision? = null,
-    onManualTriggerConsumed: () -> Unit = {},
+    manualTrigger: ManualSwipeRequest? = null,
     onSwiped: (SwipeDecision) -> Unit,
     content: @Composable (progressPx: Float) -> Unit
 ) {
@@ -34,14 +43,14 @@ fun SwipeableCard(
 
     val rotation = (offsetX.value / 20f).coerceIn(-20f, 20f)
 
-    // Permite disparar el swipe desde botones externos (✕/✓), reusando
-    // la misma animación de salida que el gesto de arrastre.
+    // Se relanza en cada click nuevo (el token siempre cambia), incluso si
+    // el click anterior seguía animando: cancela esa animación limpiamente
+    // y arranca la nueva desde la posición actual, sin quedar atorado.
     LaunchedEffect(manualTrigger) {
-        val decision = manualTrigger ?: return@LaunchedEffect
-        offsetX.animateTo(if (decision == SwipeDecision.RIGHT) exitPx else -exitPx)
-        onSwiped(decision)
+        val request = manualTrigger ?: return@LaunchedEffect
+        offsetX.animateTo(if (request.decision == SwipeDecision.RIGHT) exitPx else -exitPx)
+        onSwiped(request.decision)
         offsetX.snapTo(0f)
-        onManualTriggerConsumed()
     }
 
     Box(
