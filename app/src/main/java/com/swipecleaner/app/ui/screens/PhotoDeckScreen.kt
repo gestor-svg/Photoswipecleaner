@@ -87,7 +87,7 @@ fun PhotoDeckScreen(
         )
     }
 
-    / Disparador de swipe manual desde los botones ✕/✓. Cada click suma un
+    // Disparador de swipe manual desde los botones ✕/✓. Cada click suma un
     // token nuevo (ver ManualSwipeRequest) para que nunca se pierda un click.
     var manualSwipeCounter by remember { mutableStateOf(0) }
     var manualSwipe by remember { mutableStateOf<ManualSwipeRequest?>(null) }
