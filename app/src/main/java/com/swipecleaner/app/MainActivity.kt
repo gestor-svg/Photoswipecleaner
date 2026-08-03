@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.*
 import com.swipecleaner.app.domain.BucketFolder
 import com.swipecleaner.app.ui.PermissionGate
+import com.swipecleaner.app.ui.screens.AboutScreen
 import com.swipecleaner.app.ui.screens.FolderSelectionScreen
 import com.swipecleaner.app.ui.screens.PhotoDeckScreen
 
@@ -21,17 +22,24 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     PermissionGate {
                         var selectedFolder by remember { mutableStateOf<BucketFolder?>(null) }
+                        var showAbout by remember { mutableStateOf(false) }
 
-                        val folder = selectedFolder
-                        if (folder == null) {
-                            FolderSelectionScreen(
-                                onFolderSelected = { selectedFolder = it }
-                            )
-                        } else {
-                            PhotoDeckScreen(
-                                folder = folder,
-                                onBack = { selectedFolder = null }
-                            )
+                        when {
+                            showAbout -> {
+                                AboutScreen(onBack = { showAbout = false })
+                            }
+                            selectedFolder != null -> {
+                                PhotoDeckScreen(
+                                    folder = selectedFolder!!,
+                                    onBack = { selectedFolder = null }
+                                )
+                            }
+                            else -> {
+                                FolderSelectionScreen(
+                                    onFolderSelected = { selectedFolder = it },
+                                    onAboutClick = { showAbout = true }
+                                )
+                            }
                         }
                     }
                 }
