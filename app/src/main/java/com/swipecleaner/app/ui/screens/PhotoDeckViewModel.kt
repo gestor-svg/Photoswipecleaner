@@ -19,9 +19,13 @@ sealed interface PhotoDeckState {
         val currentIndex: Int = 0,
         val history: List<SwipeResult> = emptyList(),
         val freedBytes: Long = 0L,
-        val lastConfirmedCount: Int? = null
+        // Acumulado de fotos/bytes ya confirmados hacia la papelera en esta
+        // sesión del deck. Se puede confirmar más de una vez (botón
+        // "Confirmar" a mitad del deck, además del final).
+        val confirmedCount: Int = 0,
+        val confirmedBytes: Long = 0L
     ) : PhotoDeckState {
-        /** Fotos marcadas para papelera hasta el momento. */
+        /** Fotos marcadas para papelera, aún no enviadas. */
         val trashCandidates: List<PhotoItem>
             get() = history.filter { it.direction == SwipeDirection.LEFT }.map { it.photo }
     }
@@ -37,10 +41,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var currentBucketId: String? = null
 
-    /**
-     * Carga las fotos de la carpeta indicada. Idempotente: si ya se cargó
-     * esa misma carpeta, no vuelve a consultar MediaStore.
-     */
     fun loadPhotos(bucketId: String) {
         if (currentBucketId == bucketId && _state.value is PhotoDeckState.Loaded) return
         currentBucketId = bucketId
@@ -55,11 +55,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /**
-     * Registra la decisión del swipe sobre la foto actual y avanza al siguiente elemento.
-     * LEFT -> se agrega a candidatos para papelera y suma su tamaño al contador de espacio.
-     * RIGHT -> se conserva, no afecta el contador.
-     */
     fun onSwipe(direction: SwipeDirection) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
@@ -75,7 +70,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    /** Deshace la última decisión: retrocede el índice y revierte el contador si aplica. */
     fun undo() {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded || s.history.isEmpty()) return
@@ -90,17 +84,19 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Se llama tras el resultado del [TrashOrchestrator][com.swipecleaner.app.ui.trash.rememberTrashOrchestrator].
-     * Limpia el historial (ya no tiene sentido deshacer algo ya enviado a papelera)
-     * y guarda cuántas fotos se confirmaron para mostrar el resumen final.
+     * Se llama tras el resultado del TrashOrchestrator. Puede ocurrir a mitad
+     * del deck (botón "Confirmar" en la barra superior) o al final. En ambos
+     * casos limpia el historial pendiente y acumula el conteo/bytes ya
+     * confirmados, sin tocar currentIndex, para poder seguir deslizando.
      */
     fun onTrashConfirmed(deletedCount: Int) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
         _state.value = s.copy(
             history = emptyList(),
-            freedBytes = 0L,
-            lastConfirmedCount = deletedCount
+            confirmedCount = s.confirmedCount + deletedCount,
+            confirmedBytes = s.confirmedBytes + s.freedBytes,
+            freedBytes = 0L
         )
     }
 }
