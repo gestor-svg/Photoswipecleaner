@@ -3,7 +3,9 @@ package com.swipecleaner.app.ui.screens
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.swipecleaner.app.data.DAILY_SWIPE_LIMIT
 import com.swipecleaner.app.data.MediaRepository
+import com.swipecleaner.app.data.SwipeLimitManager
 import com.swipecleaner.app.domain.PhotoItem
 import com.swipecleaner.app.domain.SwipeDirection
 import com.swipecleaner.app.domain.SwipeResult
@@ -21,16 +23,12 @@ sealed interface PhotoDeckState {
         val currentIndex: Int = 0,
         val history: List<SwipeResult> = emptyList(),
         val freedBytes: Long = 0L,
-        // Acumulado de fotos/bytes ya confirmados hacia la papelera en esta
-        // sesión del deck (puede pasar más de una vez: botón "Confirmar" a
-        // mitad del deck, banner de dañados, o al final).
         val confirmedCount: Int = 0,
         val confirmedBytes: Long = 0L,
-        // Archivos detectados como dañados por el escaneo en segundo plano,
-        // pendientes de enviar a papelera vía el banner.
-        val corruptedPhotos: List<PhotoItem> = emptyList()
+        val corruptedPhotos: List<PhotoItem> = emptyList(),
+        // Swipes restantes hoy (0..30), independiente de la carpeta.
+        val remainingSwipesToday: Int = DAILY_SWIPE_LIMIT
     ) : PhotoDeckState {
-        /** Fotos marcadas para papelera, aún no enviadas. */
         val trashCandidates: List<PhotoItem>
             get() = history.filter { it.direction == SwipeDirection.LEFT }.map { it.photo }
     }
@@ -40,6 +38,7 @@ sealed interface PhotoDeckState {
 class PhotoDeckViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = MediaRepository(application)
+    private val swipeLimitManager = SwipeLimitManager(application)
 
     private val _state = MutableStateFlow<PhotoDeckState>(PhotoDeckState.Loading)
     val state: StateFlow<PhotoDeckState> = _state.asStateFlow()
@@ -53,7 +52,10 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 val photos = repository.getPhotosInFolder(bucketId)
-                _state.value = PhotoDeckState.Loaded(photos)
+                _state.value = PhotoDeckState.Loaded(
+                    photos = photos,
+                    remainingSwipesToday = swipeLimitManager.remaining()
+                )
                 scanForCorruptedFiles(photos)
             } catch (e: Exception) {
                 _state.value = PhotoDeckState.Error(e.message ?: "Error al cargar fotos")
@@ -61,12 +63,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /**
-     * Escanea la carpeta completa en segundo plano (sin bloquear el swipe)
-     * buscando archivos dañados/ilegibles. Al terminar, si encontró alguno,
-     * lo publica en el estado para que el banner aparezca en pantalla —
-     * el usuario puede seguir deslizando mientras tanto.
-     */
     private fun scanForCorruptedFiles(photos: List<PhotoItem>) {
         viewModelScope.launch(Dispatchers.IO) {
             val corrupted = mutableListOf<PhotoItem>()
@@ -79,9 +75,7 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
 
             withContext(Dispatchers.Main) {
                 val s = _state.value
-                // Si el usuario ya cambió de carpeta mientras escaneábamos, descartar el resultado.
                 if (s is PhotoDeckState.Loaded && s.photos === photos) {
-                    // Excluye los que el usuario ya resolvió a mano por swipe mientras corría el escaneo.
                     val alreadyHandledIds = s.history.map { it.photo.id }.toSet()
                     val filtered = corrupted.filterNot { it.id in alreadyHandledIds }
                     if (filtered.isNotEmpty()) {
@@ -95,18 +89,28 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     fun onSwipe(direction: SwipeDirection) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
-        val photo = s.photos.getOrNull(s.currentIndex) ?: return
+        // Límite diario ya alcanzado: ignora el intento de swipe. La UI no
+        // debería permitir llegar aquí (oculta el gesto/botones), esto es
+        // un resguardo adicional.
+        if (s.remainingSwipesToday <= 0) return
 
+        val photo = s.photos.getOrNull(s.currentIndex) ?: return
         val result = SwipeResult(photo, direction)
         val freedDelta = if (direction == SwipeDirection.LEFT) photo.sizeBytes else 0L
+        val updatedCount = swipeLimitManager.registerSwipe()
 
         _state.value = s.copy(
             currentIndex = s.currentIndex + 1,
             history = s.history + result,
-            freedBytes = s.freedBytes + freedDelta
+            freedBytes = s.freedBytes + freedDelta,
+            remainingSwipesToday = (DAILY_SWIPE_LIMIT - updatedCount).coerceAtLeast(0)
         )
     }
 
+    /**
+     * Deshacer NO devuelve cupo del límite diario a propósito: si lo hiciera,
+     * swipe→deshacer→swipe repetido evadiría el límite por completo.
+     */
     fun undo() {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded || s.history.isEmpty()) return
@@ -120,11 +124,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    /**
-     * Se llama tras el resultado del TrashOrchestrator para las fotos
-     * marcadas manualmente (swipe/botones). Puede ocurrir a mitad del deck
-     * (botón "Confirmar") o al final.
-     */
     fun onTrashConfirmed(deletedCount: Int) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
@@ -136,12 +135,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    /**
-     * Se llama tras enviar a papelera el lote de archivos dañados desde el
-     * banner. A diferencia de onTrashConfirmed, aquí sí hay que quitar esas
-     * fotos de la lista `photos` (ya no existen para seguir deslizando) y
-     * reacomodar currentIndex si alguna ya había sido recorrida.
-     */
     fun onCorruptedTrashConfirmed(sentPhotos: List<PhotoItem>, deletedCount: Int) {
         if (sentPhotos.isEmpty()) return
         val s = _state.value
