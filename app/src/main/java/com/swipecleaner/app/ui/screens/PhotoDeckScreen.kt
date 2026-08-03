@@ -87,8 +87,10 @@ fun PhotoDeckScreen(
         )
     }
 
-    // Disparador de swipe manual desde los botones ✕/✓.
-    var manualSwipe by remember { mutableStateOf<SwipeDecision?>(null) }
+    / Disparador de swipe manual desde los botones ✕/✓. Cada click suma un
+    // token nuevo (ver ManualSwipeRequest) para que nunca se pierda un click.
+    var manualSwipeCounter by remember { mutableStateOf(0) }
+    var manualSwipe by remember { mutableStateOf<ManualSwipeRequest?>(null) }
 
     // El banner de dañados se resetea a "visible" cada vez que cambia la
     // lista (nuevo hallazgo del escaneo, o se vació al enviarlos).
@@ -181,7 +183,6 @@ fun PhotoDeckScreen(
 
                                 SwipeableCard(
                                     manualTrigger = manualSwipe,
-                                    onManualTriggerConsumed = { manualSwipe = null },
                                     onSwiped = { decision ->
                                         val direction = if (decision == SwipeDecision.LEFT)
                                             SwipeDirection.LEFT else SwipeDirection.RIGHT
@@ -218,10 +219,16 @@ fun PhotoDeckScreen(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    OutlinedButton(onClick = { manualSwipe = SwipeDecision.LEFT }) {
+                     OutlinedButton(onClick = {
+                        manualSwipeCounter++
+                        manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
+                    }) {
                         Text("✕  Borrar")
                     }
-                    OutlinedButton(onClick = { manualSwipe = SwipeDecision.RIGHT }) {
+                    OutlinedButton(onClick = {
+                        manualSwipeCounter++
+                        manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
+                    }) {
                         Text("✓  Conservar")
                     }
                 }
