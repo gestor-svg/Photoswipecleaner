@@ -39,9 +39,6 @@ fun PhotoDeckScreen(
         onFinished = { deletedCount -> viewModel.onTrashConfirmed(deletedCount) }
     )
 
-    // Segundo orquestador, dedicado al lote de archivos dañados del banner.
-    // Se guarda una copia (snapshot) del lote enviado porque para cuando el
-    // resultado llega, el estado ya pudo haber cambiado.
     var pendingCorruptedBatch by remember { mutableStateOf<List<PhotoItem>>(emptyList()) }
     val corruptedTrashAction = rememberTrashOrchestrator(
         onFinished = { deletedCount ->
@@ -50,7 +47,15 @@ fun PhotoDeckScreen(
         }
     )
 
-    // Diálogo de confirmación al salir con fotos marcadas pendientes.
+    // Mensaje de celebración al confirmar ("¡Felicidades! Vas a liberar X").
+    var celebrateMessage by remember { mutableStateOf<String?>(null) }
+
+    fun confirmWithCelebration(photos: List<PhotoItem>, freedBytes: Long) {
+        if (photos.isEmpty()) return
+        celebrateMessage = "¡Felicidades! Vas a liberar ${formatSize(freedBytes)} 🎉"
+        trashAction(photos)
+    }
+
     var showExitDialog by remember { mutableStateOf(false) }
 
     fun requestExit() {
@@ -87,13 +92,21 @@ fun PhotoDeckScreen(
         )
     }
 
+    celebrateMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { celebrateMessage = null },
+            confirmButton = {
+                TextButton(onClick = { celebrateMessage = null }) { Text("¡Genial!") }
+            },
+            text = { Text(msg) }
+        )
+    }
+
     // Disparador de swipe manual desde los botones ✕/✓. Cada click suma un
-    // token nuevo (ver ManualSwipeRequest) para que nunca se pierda un click.
+    // token nuevo para que nunca se pierda un click (ver ManualSwipeRequest).
     var manualSwipeCounter by remember { mutableStateOf(0) }
     var manualSwipe by remember { mutableStateOf<ManualSwipeRequest?>(null) }
 
-    // El banner de dañados se resetea a "visible" cada vez que cambia la
-    // lista (nuevo hallazgo del escaneo, o se vació al enviarlos).
     var corruptedBannerDismissed by remember(loaded?.corruptedPhotos) { mutableStateOf(false) }
 
     Scaffold(topBar = {
@@ -108,7 +121,7 @@ fun PhotoDeckScreen(
                     enabled = loaded?.history?.isNotEmpty() == true
                 ) { Text("Deshacer") }
                 TextButton(
-                    onClick = { loaded?.let { trashAction(it.trashCandidates) } },
+                    onClick = { loaded?.let { confirmWithCelebration(it.trashCandidates, it.freedBytes) } },
                     enabled = loaded?.trashCandidates?.isNotEmpty() == true
                 ) { Text("Confirmar") }
             }
@@ -123,11 +136,11 @@ fun PhotoDeckScreen(
                 ) {
                     Text(
                         "Revisadas ${loaded.currentIndex.coerceAtMost(loaded.photos.size)} de ${loaded.photos.size} · " +
-                        "${formatSize(loaded.freedBytes)} marcados para papelera" +
-                        if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodySmall
-)
+                            "${formatSize(loaded.freedBytes)} marcados para papelera" +
+                            if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
 
@@ -156,13 +169,18 @@ fun PhotoDeckScreen(
                         val photos = s.photos
                         val index = s.currentIndex
 
-                        if (index >= photos.size) {
+                        if (s.remainingSwipesToday <= 0) {
+                            LimitReachedView(
+                                state = s,
+                                onConfirm = { trashAction(s.trashCandidates) }
+                            )
+                        } else if (index >= photos.size) {
                             if (photos.isEmpty()) {
                                 Text("Esta carpeta no tiene fotos")
                             } else {
                                 DeckSummary(
                                     state = s,
-                                    onConfirm = { trashAction(s.trashCandidates) }
+                                    onConfirm = { confirmWithCelebration(s.trashCandidates, s.freedBytes) }
                                 )
                             }
                         } else {
@@ -213,13 +231,13 @@ fun PhotoDeckScreen(
                 }
             }
 
-            // Botones manuales ✕/✓, alternativa al swipe físico.
-            if (loaded != null && loaded.currentIndex < loaded.photos.size) {
+            // Botones manuales ✕/✓ — ocultos si ya se llegó al límite diario.
+            if (loaded != null && loaded.remainingSwipesToday > 0 && loaded.currentIndex < loaded.photos.size) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                     OutlinedButton(onClick = {
+                    OutlinedButton(onClick = {
                         manualSwipeCounter++
                         manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
                     }) {
@@ -238,11 +256,47 @@ fun PhotoDeckScreen(
 }
 
 /**
- * Banner que avisa cuando el escaneo en segundo plano encontró archivos
- * dañados/ilegibles. No bloquea el swipe: aparece mientras el usuario ya
- * está deslizando. "Ignorar" solo lo oculta visualmente (no borra nada,
- * no descarta el hallazgo del estado).
+ * Pantalla que reemplaza el deck cuando se agotó el cupo diario de 30
+ * swipes. Muestra lo liberado hoy, lo que falta en esta carpeta, y un botón
+ * de donar como placeholder (aún no existe el sistema de tiers/pago real).
  */
+@Composable
+private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(24.dp)
+    ) {
+        Text("Por hoy ya revisaste tus 30 fotos gratis 🙌", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Llevas liberado ${formatSize(state.freedBytes + state.confirmedBytes)} en total hoy.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        if (state.currentIndex < state.photos.size) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Te faltan ${state.photos.size - state.currentIndex} fotos por revisar en esta carpeta.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        if (state.trashCandidates.isNotEmpty()) {
+            Button(onClick = onConfirm) { Text("Enviar lo marcado a la papelera") }
+            Spacer(Modifier.height(12.dp))
+        }
+        Text(
+            "Si quieres seguir liberando espacio hoy mismo, es muy fácil: ayúdanos donando 💛",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { /* TODO: enlazar con el sistema de tiers/Mercado Pago cuando exista */ }) {
+            Text("Donar (próximamente)")
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Vuelve mañana para seguir gratis 🙂", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 @Composable
 private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -> Unit) {
     Surface(
@@ -268,12 +322,6 @@ private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -
     }
 }
 
-/**
- * Imagen de la tarjeta con manejo de error de Coil: si el archivo está dañado
- * o no se puede decodificar, muestra un placeholder en vez de una tarjeta en
- * blanco o un posible crash. El usuario decide qué hacer (normalmente swipe
- * izquierda para descartarla).
- */
 @Composable
 private fun PhotoCardImage(uri: android.net.Uri, contentDescription: String?) {
     val painter = rememberAsyncImagePainter(uri)
@@ -297,10 +345,7 @@ private fun PhotoCardImage(uri: android.net.Uri, contentDescription: String?) {
                 Text("⚠️", style = MaterialTheme.typography.displayMedium)
                 Spacer(Modifier.height(8.dp))
                 Text("Imagen dañada", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Desliza para continuar",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text("Desliza para continuar", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -320,10 +365,7 @@ private fun DeckSummary(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text("${state.confirmedCount} fotos enviadas a la papelera del sistema en total")
             Spacer(Modifier.height(4.dp))
-            Text(
-                "Se eliminarán automáticamente en 30 días",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text("Se eliminarán automáticamente en 30 días", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -343,9 +385,7 @@ private fun DeckSummary(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(16.dp))
-            Button(onClick = onConfirm) {
-                Text("Enviar a la papelera")
-            }
+            Button(onClick = onConfirm) { Text("Enviar a la papelera") }
         }
     }
 }
