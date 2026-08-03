@@ -120,11 +120,12 @@ fun PhotoDeckScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
+                        "Revisadas ${loaded.currentIndex.coerceAtMost(loaded.photos.size)} de ${loaded.photos.size} · " +
                         "${formatSize(loaded.freedBytes)} marcados para papelera" +
-                            if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                        if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall
+)
                 }
             }
 
