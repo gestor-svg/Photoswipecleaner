@@ -210,7 +210,7 @@ fun PhotoDeckScreen(
 @Composable
 private fun PhotoCardImage(uri: android.net.Uri, contentDescription: String?) {
     val painter = rememberAsyncImagePainter(uri)
-    val painterState by painter.state
+   val painterState = painter.state
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
