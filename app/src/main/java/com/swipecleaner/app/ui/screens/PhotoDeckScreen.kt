@@ -1,27 +1,26 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
-            
+
 package com.swipecleaner.app.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import com.swipecleaner.app.domain.BucketFolder
 import com.swipecleaner.app.domain.SwipeDirection
 import com.swipecleaner.app.ui.trash.rememberTrashOrchestrator
 import java.util.Locale
 
-/**
- * Punto de entrada del deck: carga las fotos de la carpeta y muestra
- * la tarjeta superior con su thumbnail. La lógica de gestos (swipe)
- * se añade sobre este mismo Composable en el paso 6.
- */
 @Composable
 fun PhotoDeckScreen(
     folder: BucketFolder,
@@ -39,17 +38,61 @@ fun PhotoDeckScreen(
         onFinished = { deletedCount -> viewModel.onTrashConfirmed(deletedCount) }
     )
 
+    // Diálogo de confirmación al salir con fotos marcadas pendientes.
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    fun requestExit() {
+        if (loaded != null && loaded.trashCandidates.isNotEmpty()) {
+            showExitDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler(onBack = { requestExit() })
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Tienes fotos marcadas sin enviar") },
+            text = { Text("¿Qué quieres hacer con las fotos que marcaste para borrar en esta carpeta?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitDialog = false
+                    loaded?.let { trashAction(it.trashCandidates) }
+                    onBack()
+                }) { Text("Enviar y salir") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showExitDialog = false
+                        onBack()
+                    }) { Text("Salir sin cambios") }
+                    TextButton(onClick = { showExitDialog = false }) { Text("Cancelar") }
+                }
+            }
+        )
+    }
+
+    // Disparador de swipe manual desde los botones ✕/✓.
+    var manualSwipe by remember { mutableStateOf<SwipeDecision?>(null) }
+
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(folder.name) },
             navigationIcon = {
-                TextButton(onClick = onBack) { Text("← Carpetas") }
+                TextButton(onClick = { requestExit() }) { Text("← Carpetas") }
             },
             actions = {
                 TextButton(
                     onClick = { viewModel.undo() },
                     enabled = loaded?.history?.isNotEmpty() == true
                 ) { Text("Deshacer") }
+                TextButton(
+                    onClick = { loaded?.let { trashAction(it.trashCandidates) } },
+                    enabled = loaded?.trashCandidates?.isNotEmpty() == true
+                ) { Text("Confirmar") }
             }
         )
     }) { padding ->
@@ -61,7 +104,8 @@ fun PhotoDeckScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        "${formatSize(loaded.freedBytes)} marcados para papelera",
+                        "${formatSize(loaded.freedBytes)} marcados para papelera" +
+                            if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -69,82 +113,68 @@ fun PhotoDeckScreen(
             }
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-            when (val s = state) {
-                is PhotoDeckState.Loading -> CircularProgressIndicator()
+                when (val s = state) {
+                    is PhotoDeckState.Loading -> CircularProgressIndicator()
 
-                is PhotoDeckState.Error -> Text("Error: ${s.message}")
+                    is PhotoDeckState.Error -> Text("Error: ${s.message}")
 
-                is PhotoDeckState.Loaded -> {
-                    val photos = s.photos
-                    val index = s.currentIndex
+                    is PhotoDeckState.Loaded -> {
+                        val photos = s.photos
+                        val index = s.currentIndex
 
-                    if (index >= photos.size) {
-                        if (photos.isEmpty()) {
-                            Text("Esta carpeta no tiene fotos")
-                        } else {
-                            DeckSummary(
-                                state = s,
-                                onConfirm = { trashAction(s.trashCandidates) }
-                            )
-                        }
-                    } else {
-                        val top = photos[index]
-                        val next = photos.getOrNull(index + 1)
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.85f)
-                                .aspectRatio(0.75f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Carta de fondo (siguiente foto), sin gesto
-                            if (next != null) {
-                                Card(modifier = Modifier.fillMaxSize()) {
-                                    Image(
-                                        painter = rememberAsyncImagePainter(next.uri),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
+                        if (index >= photos.size) {
+                            if (photos.isEmpty()) {
+                                Text("Esta carpeta no tiene fotos")
+                            } else {
+                                DeckSummary(
+                                    state = s,
+                                    onConfirm = { trashAction(s.trashCandidates) }
+                                )
                             }
+                        } else {
+                            val top = photos[index]
+                            val next = photos.getOrNull(index + 1)
 
-                            // Carta superior: arrastrable
-                            SwipeableCard(
-                                onSwiped = { decision ->
-                                    val direction = if (decision == SwipeDecision.LEFT)
-                                        SwipeDirection.LEFT else SwipeDirection.RIGHT
-                                    viewModel.onSwipe(direction)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .aspectRatio(0.75f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (next != null) {
+                                    Card(modifier = Modifier.fillMaxSize()) {
+                                        PhotoCardImage(uri = next.uri, contentDescription = null)
+                                    }
                                 }
-                            ) { progressPx ->
-                                Card(modifier = Modifier.fillMaxSize()) {
-                                    Box {
-                                        Image(
-                                            painter = rememberAsyncImagePainter(top.uri),
-                                            contentDescription = top.displayName,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                        val leftAlpha = (-progressPx / 300f).coerceIn(0f, 1f)
-                                        val rightAlpha = (progressPx / 300f).coerceIn(0f, 1f)
-                                        Text(
-                                            "PAPELERA",
-                                            color = androidx.compose.ui.graphics.Color(0xFFE2685F).copy(alpha = leftAlpha),
-                                            modifier = Modifier
-                                                .align(Alignment.TopStart)
-                                                .padding(16.dp)
-                                        )
-                                        Text(
-                                            "CONSERVAR",
-                                            color = androidx.compose.ui.graphics.Color(0xFF7FAE6A).copy(alpha = rightAlpha),
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(16.dp)
-                                        )
+
+                                SwipeableCard(
+                                    manualTrigger = manualSwipe,
+                                    onManualTriggerConsumed = { manualSwipe = null },
+                                    onSwiped = { decision ->
+                                        val direction = if (decision == SwipeDecision.LEFT)
+                                            SwipeDirection.LEFT else SwipeDirection.RIGHT
+                                        viewModel.onSwipe(direction)
+                                    }
+                                ) { progressPx ->
+                                    Card(modifier = Modifier.fillMaxSize()) {
+                                        Box {
+                                            PhotoCardImage(uri = top.uri, contentDescription = top.displayName)
+                                            val leftAlpha = (-progressPx / 300f).coerceIn(0f, 1f)
+                                            val rightAlpha = (progressPx / 300f).coerceIn(0f, 1f)
+                                            Text(
+                                                "PAPELERA",
+                                                color = Color(0xFFE2685F).copy(alpha = leftAlpha),
+                                                modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+                                            )
+                                            Text(
+                                                "CONSERVAR",
+                                                color = Color(0xFF7FAE6A).copy(alpha = rightAlpha),
+                                                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -152,8 +182,60 @@ fun PhotoDeckScreen(
                     }
                 }
             }
-            } // fin Box
-        } // fin Column
+
+            // Botones manuales ✕/✓, alternativa al swipe físico.
+            if (loaded != null && loaded.currentIndex < loaded.photos.size) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    OutlinedButton(onClick = { manualSwipe = SwipeDecision.LEFT }) {
+                        Text("✕  Borrar")
+                    }
+                    OutlinedButton(onClick = { manualSwipe = SwipeDecision.RIGHT }) {
+                        Text("✓  Conservar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Imagen de la tarjeta con manejo de error de Coil: si el archivo está dañado
+ * o no se puede decodificar, muestra un placeholder en vez de una tarjeta en
+ * blanco o un posible crash. El usuario decide qué hacer (normalmente swipe
+ * izquierda para descartarla).
+ */
+@Composable
+private fun PhotoCardImage(uri: android.net.Uri, contentDescription: String?) {
+    val painter = rememberAsyncImagePainter(uri)
+    val painterState by painter.state
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painter,
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+        if (painterState is AsyncImagePainter.State.Error) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("⚠️", style = MaterialTheme.typography.displayMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Imagen dañada", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Desliza para continuar",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
     }
 }
 
@@ -163,29 +245,29 @@ private fun formatSize(bytes: Long): String {
     else String.format(Locale.getDefault(), "%.1f MB", mb)
 }
 
-/**
- * Pantalla al terminar el deck: si ya hubo confirmación previa muestra el
- * resultado; si no, muestra el resumen de candidatos y el botón que dispara
- * el diálogo de sistema para enviarlos a la papelera.
- */
 @Composable
 private fun DeckSummary(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
-    val confirmedCount = state.lastConfirmedCount
-
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (confirmedCount != null) {
+        if (state.confirmedCount > 0) {
             Text("Listo ✅", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
-            Text("$confirmedCount fotos enviadas a la papelera del sistema")
+            Text("${state.confirmedCount} fotos enviadas a la papelera del sistema en total")
             Spacer(Modifier.height(4.dp))
             Text(
                 "Se eliminarán automáticamente en 30 días",
                 style = MaterialTheme.typography.bodySmall
             )
-        } else if (state.trashCandidates.isEmpty()) {
-            Text("Carpeta revisada ✅")
-            Spacer(Modifier.height(4.dp))
-            Text("No marcaste ninguna foto para borrar", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(16.dp))
+        }
+
+        if (state.trashCandidates.isEmpty()) {
+            if (state.confirmedCount == 0) {
+                Text("Carpeta revisada ✅")
+                Spacer(Modifier.height(4.dp))
+                Text("No marcaste ninguna foto para borrar", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("Carpeta terminada", style = MaterialTheme.typography.bodySmall)
+            }
         } else {
             Text("Carpeta revisada", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
