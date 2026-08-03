@@ -50,7 +50,7 @@ class MediaRepository(private val context: Context) {
                 photoCount = entries.size,
                 totalSizeBytes = entries.sumOf { it.second }
             )
-        }.sortedByDescending { it.photoCount }
+        }.sortedByDescending { it.totalSizeBytes }
     }
 
     /**
