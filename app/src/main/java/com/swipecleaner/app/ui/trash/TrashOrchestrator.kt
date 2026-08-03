@@ -25,7 +25,7 @@ fun rememberTrashOrchestrator(onFinished: (deletedCount: Int) -> Unit): (List<Ph
     var pendingContinuation by remember { mutableStateOf<CancellableContinuation<Boolean>?>(null) }
 
     fun resumePending(resultCode: Int) {
-        pendingContinuation?.resume(resultCode == Activity.RESULT_OK)
+        pendingContinuation?.resume(resultCode == Activity.RESULT_OK, null)
         pendingContinuation = null
     }
 
