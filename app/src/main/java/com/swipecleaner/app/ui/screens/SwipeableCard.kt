@@ -21,6 +21,8 @@ private const val EXIT_DISTANCE_DP = 500
 
 @Composable
 fun SwipeableCard(
+    manualTrigger: SwipeDecision? = null,
+    onManualTriggerConsumed: () -> Unit = {},
     onSwiped: (SwipeDecision) -> Unit,
     content: @Composable (progressPx: Float) -> Unit
 ) {
@@ -31,6 +33,16 @@ fun SwipeableCard(
     val exitPx = with(density) { EXIT_DISTANCE_DP.dp.toPx() }
 
     val rotation = (offsetX.value / 20f).coerceIn(-20f, 20f)
+
+    // Permite disparar el swipe desde botones externos (✕/✓), reusando
+    // la misma animación de salida que el gesto de arrastre.
+    LaunchedEffect(manualTrigger) {
+        val decision = manualTrigger ?: return@LaunchedEffect
+        offsetX.animateTo(if (decision == SwipeDecision.RIGHT) exitPx else -exitPx)
+        onSwiped(decision)
+        offsetX.snapTo(0f)
+        onManualTriggerConsumed()
+    }
 
     Box(
         modifier = Modifier
@@ -63,19 +75,5 @@ fun SwipeableCard(
             }
     ) {
         content(offsetX.value)
-    }
-}
-
-fun triggerProgrammaticSwipe(
-    scope: kotlinx.coroutines.CoroutineScope,
-    offsetX: Animatable<Float, *>,
-    exitPx: Float,
-    direction: SwipeDecision,
-    onSwiped: (SwipeDecision) -> Unit
-) {
-    scope.launch {
-        offsetX.animateTo(if (direction == SwipeDecision.RIGHT) exitPx else -exitPx)
-        onSwiped(direction)
-        offsetX.snapTo(0f)
     }
 }
