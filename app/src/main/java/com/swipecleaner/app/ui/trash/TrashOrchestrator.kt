@@ -16,29 +16,16 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/**
- * Expone una función `(List<PhotoItem>) -> Unit` que envía un lote de fotos
- * a la papelera, resolviendo automáticamente qué flujo usar según la
- * versión de Android:
- *
- * - API 30+: una sola confirmación de sistema para todo el lote.
- * - API 29: confirmación individual por foto (RecoverableSecurityException).
- * - API 26-28: borrado directo.
- *
- * [onFinished] se llama con la cantidad de fotos efectivamente eliminadas/enviadas.
- */
 @Composable
 fun rememberTrashOrchestrator(onFinished: (deletedCount: Int) -> Unit): (List<PhotoItem>) -> Unit {
     val context = LocalContext.current
     val trashManager = remember { TrashManager(context) }
     val scope = rememberCoroutineScope()
 
-    // Continuación pendiente compartida: cualquiera de los dos launchers
-    // (lote o permiso individual) la resume con el resultado del sistema.
     var pendingContinuation by remember { mutableStateOf<CancellableContinuation<Boolean>?>(null) }
 
     fun resumePending(resultCode: Int) {
-        pendingContinuation?.resume(resultCode == Activity.RESULT_OK) { _, _, _ -> }
+        pendingContinuation?.resume(resultCode == Activity.RESULT_OK)
         pendingContinuation = null
     }
 
@@ -64,12 +51,10 @@ fun rememberTrashOrchestrator(onFinished: (deletedCount: Int) -> Unit): (List<Ph
             val uris = photos.map { it.uri }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Flujo moderno: un único diálogo de sistema para todo el lote
                 val sender = trashManager.createTrashIntentSender(uris)
                 val confirmed = awaitIntentSender(sender, batchLauncher)
                 onFinished(if (confirmed) photos.size else 0)
             } else {
-                // Flujo legacy: se procesa foto por foto
                 var deletedCount = 0
                 for (uri in uris) {
                     when (val outcome = trashManager.deleteLegacy(uri)) {
