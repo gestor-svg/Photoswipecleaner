@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.swipecleaner.app.ui.screens
 
 import androidx.compose.foundation.layout.*
