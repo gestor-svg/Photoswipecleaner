@@ -2,6 +2,8 @@ package com.swipecleaner.app.data
 
 import android.content.ContentUris
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.provider.MediaStore
 import com.swipecleaner.app.domain.BucketFolder
 import com.swipecleaner.app.domain.PhotoItem
@@ -54,14 +56,16 @@ class MediaRepository(private val context: Context) {
     }
 
     /**
-     * Devuelve las fotos de una carpeta específica, más recientes primero.
+     * Devuelve las fotos de una carpeta específica, ordenadas por tamaño
+     * descendente (las más pesadas primero) — consistente con el objetivo
+     * principal de la app: liberar espacio lo más rápido posible.
      */
     suspend fun getPhotosInFolder(bucketId: String): List<PhotoItem> = withContext(Dispatchers.IO) {
         val result = mutableListOf<PhotoItem>()
         val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val selection = "${MediaStore.Images.Media.BUCKET_ID} = ?"
         val selectionArgs = arrayOf(bucketId)
-        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        val sortOrder = "${MediaStore.Images.Media.SIZE} DESC"
 
         context.contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -84,5 +88,26 @@ class MediaRepository(private val context: Context) {
             }
         }
         result
+    }
+
+    /**
+     * Chequeo rápido y barato de corrupción: decodifica solo el header/
+     * dimensiones de la imagen (inJustDecodeBounds), sin cargar los píxeles
+     * completos. Pensado para correr en lote sobre una carpeta entera sin
+     * bloquear la UI. Es un complemento al manejo reactivo que ya existe en
+     * PhotoCardImage (Coil), no un reemplazo: puede haber casos donde este
+     * chequeo diga "sano" y Coil aun así falle al mostrarla (formatos raros),
+     * o viceversa. Se asume que llama desde un contexto ya en Dispatchers.IO.
+     */
+    fun isCorrupted(uri: Uri): Boolean {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeStream(stream, null, options)
+                options.outWidth <= 0 || options.outHeight <= 0
+            } ?: true // no se pudo abrir el stream -> se trata como dañado
+        } catch (e: Exception) {
+            true
+        }
     }
 }
