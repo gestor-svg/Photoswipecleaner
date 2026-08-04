@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>¡Gracias! · PhotoSwipeCleaner</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --accent: #7FAE6A;
+    --text: #f2f2f2;
+    --text-muted: #a3a8b3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+    min-height: 100vh;
+  }
+  .container { max-width: 420px; width: 100%; text-align: center; }
+  .emoji { font-size: 3rem; margin-bottom: 8px; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; }
+  p { color: var(--text-muted); line-height: 1.6; font-size: 0.95rem; }
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 20px;
+    margin-top: 24px;
+    text-align: left;
+  }
+  .card h2 { font-size: 1rem; margin-top: 0; }
+  a.button {
+    display: block;
+    text-align: center;
+    background: var(--accent);
+    color: #0f1115;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    margin-top: 16px;
+  }
+  .note { font-size: 0.8rem; margin-top: 28px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🎉</div>
+    <h1>¡Gracias por tu apoyo!</h1>
+    <p>
+      Tu donación ya quedó registrada. En las próximas horas te vamos a mandar
+      tu código de desbloqueo directo por WhatsApp — actívalo dentro de la app,
+      en la pantalla <strong>"Acerca de"</strong>, en el campo de código.
+    </p>
+
+    <div class="card">
+      <h2>¿Quieres tu código más rápido?</h2>
+      <p style="margin:0;">
+        Mándanos un mensaje confirmando tu pago y te lo generamos al toque.
+      </p>
+      <!-- TODO: reemplazar TU_NUMERO por tu número real, formato 521XXXXXXXXXX (sin + ni espacios) -->
+      <a class="button" href="https://wa.me/TU_NUMERO?text=Hola%2C%20ya%20don%C3%A9%20en%20PhotoSwipeCleaner%2C%20aqu%C3%AD%20est%C3%A1%20mi%20comprobante">
+        Avisar por WhatsApp
+      </a>
+    </div>
+
+    <p class="note">
+      PhotoSwipeCleaner no tiene rastreadores ni recolecta datos personales.
+    </p>
+  </div>
+</body>
+</html>
