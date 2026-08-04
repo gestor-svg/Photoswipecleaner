@@ -7,11 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.swipecleaner.app.data.SwipeLimitManager
 
 private data class PermissionInfo(val name: String, val reason: String)
 
@@ -29,6 +30,11 @@ private val permissionsList = listOf(
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val swipeLimitManager = remember { SwipeLimitManager(context) }
+
+    var isUnlocked by remember { mutableStateOf(swipeLimitManager.isUnlocked()) }
+    var unlockCode by remember { mutableStateOf("") }
+    var unlockMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -90,6 +96,47 @@ fun AboutScreen(onBack: () -> Unit) {
                     context.startActivity(Intent.createChooser(intent, "Compartir PhotoSwipeCleaner"))
                 }) {
                     Text("Compartir esta app")
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            item {
+                Text("Código de desbloqueo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                if (isUnlocked) {
+                    Text("✅ Swipes ilimitados activos en este dispositivo", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text(
+                        "¿Tienes un código de desbloqueo? Actívalo aquí.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = unlockCode,
+                        onValueChange = {
+                            unlockCode = it
+                            unlockMessage = null
+                        },
+                        label = { Text("Código") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = {
+                        if (swipeLimitManager.tryUnlock(unlockCode)) {
+                            isUnlocked = true
+                            unlockMessage = "¡Desbloqueado! Swipes ilimitados activos."
+                        } else {
+                            unlockMessage = "Código incorrecto."
+                        }
+                        unlockCode = ""
+                    }) {
+                        Text("Desbloquear")
+                    }
+                    unlockMessage?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 Spacer(Modifier.height(24.dp))
             }
