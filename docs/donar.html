@@ -31,21 +31,27 @@
     border-radius: 14px;
     padding: 20px;
     margin-bottom: 16px;
-    text-align: left;
+    text-align: center;
+    border: 2px solid transparent;
+  }
+  .option.highlight {
+    border-color: var(--accent);
   }
   .amount { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
   .desc { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px; }
   a.button {
     display: block;
     text-align: center;
-    background: var(--accent);
-    color: #0f1115;
     font-weight: 700;
     text-decoration: none;
     padding: 12px;
     border-radius: 10px;
     font-size: 0.95rem;
+    color: #0f1115;
   }
+  a.button.yellow { background: #F2C94C; }
+  a.button.orange { background: #F2994A; }
+  a.button.green { background: var(--accent); }
   a.button:active { opacity: 0.85; }
   .note {
     color: var(--text-muted);
@@ -60,28 +66,28 @@
     <h1>Apoya PhotoSwipeCleaner 💛</h1>
     <p class="subtitle">
       Cualquier donación desbloquea 90 días de swipes ilimitados.
-      Elige el monto que quieras — todos dan lo mismo, tú decides cuánto apoyar.
+      Elige el monto que quieras (en pesos mexicanos) — todos dan lo mismo, tú decides cuánto apoyar.
     </p>
 
     <div class="option">
-      <div class="amount">$1 USD</div>
-      <div class="desc">Un cafecito chico. Cada donación ayuda igual.</div>
-      <!-- TODO: reemplazar # por el link real de Mercado Pago de $1 -->
-      <a class="button" href="#">Donar $1</a>
+      <div class="amount">$20 MXN</div>
+      <div class="desc">Gracias por la Coquita de vidrio! 🥤</div>
+      <!-- TODO: reemplazar # por el link real de Mercado Pago de $20 -->
+      <a class="button yellow" href="#">Donar $20</a>
     </div>
 
     <div class="option">
-      <div class="amount">$2 USD</div>
-      <div class="desc">Gracias por darle un poco más de impulso al proyecto.</div>
-      <!-- TODO: reemplazar # por el link real de Mercado Pago de $2 -->
-      <a class="button" href="#">Donar $2</a>
+      <div class="amount">$50 MXN</div>
+      <div class="desc">Coca más papitas para el becario! 🍟</div>
+      <!-- TODO: reemplazar # por el link real de Mercado Pago de $50 -->
+      <a class="button orange" href="#">Donar $50</a>
     </div>
 
-    <div class="option">
-      <div class="amount">$3 USD</div>
-      <div class="desc">¡Eres de los que más apoya! Muchas gracias 🙌</div>
-      <!-- TODO: reemplazar # por el link real de Mercado Pago de $3 -->
-      <a class="button" href="#">Donar $3</a>
+    <div class="option highlight">
+      <div class="amount">$65 MXN</div>
+      <div class="desc">¡Ah perro! Cafecito del día de Starbucks! ☕</div>
+      <!-- TODO: reemplazar # por el link real de Mercado Pago de $65 -->
+      <a class="button green" href="#">Donar $65</a>
     </div>
 
     <p class="note">
