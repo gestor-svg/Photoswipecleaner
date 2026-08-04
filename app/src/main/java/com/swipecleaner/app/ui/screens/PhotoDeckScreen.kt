@@ -263,6 +263,8 @@ fun PhotoDeckScreen(
  */
 @Composable
 private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(24.dp)
