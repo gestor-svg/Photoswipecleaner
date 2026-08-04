@@ -48,6 +48,17 @@ fun FolderSelectionScreen(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Donar 💛") },
+                            onClick = {
+                                menuExpanded = false
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html")
+                                )
+                                context.startActivity(intent)
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Compartir esta app") },
                             onClick = {
                                 menuExpanded = false
