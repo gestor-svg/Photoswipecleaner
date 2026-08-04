@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.swipecleaner.app.data.SwipeLimitManager
+import com.swipecleaner.app.data.UnlockResult
 
 private data class PermissionInfo(val name: String, val reason: String)
 
@@ -32,7 +33,9 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val swipeLimitManager = remember { SwipeLimitManager(context) }
 
-    var isUnlocked by remember { mutableStateOf(swipeLimitManager.isUnlocked()) }
+    var isMasterUnlocked by remember { mutableStateOf(swipeLimitManager.isMasterUnlocked()) }
+    var tier1Active by remember { mutableStateOf(swipeLimitManager.isTier1Active()) }
+    var tier1Days by remember { mutableStateOf(swipeLimitManager.tier1DaysRemaining()) }
     var unlockCode by remember { mutableStateOf("") }
     var unlockMessage by remember { mutableStateOf<String?>(null) }
 
@@ -103,39 +106,66 @@ fun AboutScreen(onBack: () -> Unit) {
             item {
                 Text("Código de desbloqueo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                if (isUnlocked) {
-                    Text("✅ Swipes ilimitados activos en este dispositivo", style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Text(
-                        "¿Tienes un código de desbloqueo? Actívalo aquí.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = unlockCode,
-                        onValueChange = {
-                            unlockCode = it
-                            unlockMessage = null
-                        },
-                        label = { Text("Código") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = {
-                        if (swipeLimitManager.tryUnlock(unlockCode)) {
-                            isUnlocked = true
-                            unlockMessage = "¡Desbloqueado! Swipes ilimitados activos."
-                        } else {
-                            unlockMessage = "Código incorrecto."
-                        }
-                        unlockCode = ""
-                    }) {
-                        Text("Desbloquear")
+
+                when {
+                    isMasterUnlocked -> {
+                        Text("✅ Swipes ilimitados activos en este dispositivo (permanente)", style = MaterialTheme.typography.bodyMedium)
                     }
-                    unlockMessage?.let {
-                        Spacer(Modifier.height(4.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    tier1Active -> {
+                        Text("✅ Tier 1 activo — te quedan $tier1Days días", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "¿Quieres renovar antes de que venza? Canjea un código nuevo cuando quieras, reemplaza la fecha por otros 90 días.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        UnlockCodeField(
+                            code = unlockCode,
+                            onCodeChange = { unlockCode = it; unlockMessage = null },
+                            message = unlockMessage,
+                            onSubmit = {
+                                when (val result = swipeLimitManager.tryUnlock(unlockCode)) {
+                                    is UnlockResult.MasterUnlocked -> {
+                                        isMasterUnlocked = true
+                                        unlockMessage = "¡Desbloqueado permanentemente!"
+                                    }
+                                    is UnlockResult.Tier1Unlocked -> {
+                                        tier1Active = true
+                                        tier1Days = swipeLimitManager.tier1DaysRemaining()
+                                        unlockMessage = "¡Renovado! ${result.days} días de Tier 1."
+                                    }
+                                    UnlockResult.Invalid -> unlockMessage = "Código incorrecto."
+                                }
+                                unlockCode = ""
+                            }
+                        )
+                    }
+                    else -> {
+                        Text(
+                            "¿Tienes un código de desbloqueo? Actívalo aquí.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        UnlockCodeField(
+                            code = unlockCode,
+                            onCodeChange = { unlockCode = it; unlockMessage = null },
+                            message = unlockMessage,
+                            onSubmit = {
+                                when (val result = swipeLimitManager.tryUnlock(unlockCode)) {
+                                    is UnlockResult.MasterUnlocked -> {
+                                        isMasterUnlocked = true
+                                        unlockMessage = "¡Desbloqueado permanentemente!"
+                                    }
+                                    is UnlockResult.Tier1Unlocked -> {
+                                        tier1Active = true
+                                        tier1Days = swipeLimitManager.tier1DaysRemaining()
+                                        unlockMessage = "¡Activado! ${result.days} días de Tier 1."
+                                    }
+                                    UnlockResult.Invalid -> unlockMessage = "Código incorrecto."
+                                }
+                                unlockCode = ""
+                            }
+                        )
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -152,12 +182,34 @@ fun AboutScreen(onBack: () -> Unit) {
                 Text("Próximamente", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Aquí vivirán las opciones de donación y funciones extra de la app conforme se vayan agregando.",
+                    "Bóveda privada, video swipes, y más funciones conforme se vayan agregando.",
                     style = MaterialTheme.typography.bodySmall
                 )
-                // TODO: sección de Donar / tiers cuando se implemente Fase 5.
-                // TODO: acceso a bóveda / funciones premium cuando se implemente Fase 4/8/9/10.
             }
         }
+    }
+}
+
+@Composable
+private fun UnlockCodeField(
+    code: String,
+    onCodeChange: (String) -> Unit,
+    message: String?,
+    onSubmit: () -> Unit
+) {
+    OutlinedTextField(
+        value = code,
+        onValueChange = onCodeChange,
+        label = { Text("Código") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = onSubmit) {
+        Text("Desbloquear")
+    }
+    message?.let {
+        Spacer(Modifier.height(4.dp))
+        Text(it, style = MaterialTheme.typography.bodySmall)
     }
 }
