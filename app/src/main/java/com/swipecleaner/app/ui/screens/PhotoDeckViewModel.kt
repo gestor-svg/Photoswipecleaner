@@ -97,16 +97,17 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         val photo = s.photos.getOrNull(s.currentIndex) ?: return
         val result = SwipeResult(photo, direction)
         val freedDelta = if (direction == SwipeDirection.LEFT) photo.sizeBytes else 0L
-        val updatedCount = swipeLimitManager.registerSwipe()
+        swipeLimitManager.registerSwipe()
 
         _state.value = s.copy(
             currentIndex = s.currentIndex + 1,
             history = s.history + result,
             freedBytes = s.freedBytes + freedDelta,
-            remainingSwipesToday = (DAILY_SWIPE_LIMIT - updatedCount).coerceAtLeast(0)
+            // Se relee del manager (no se recalcula a mano) para que respete
+            // el estado "desbloqueado" por código maestro correctamente.
+            remainingSwipesToday = swipeLimitManager.remaining()
         )
     }
-
     /**
      * Deshacer NO devuelve cupo del límite diario a propósito: si lo hiciera,
      * swipe→deshacer→swipe repetido evadiría el límite por completo.
