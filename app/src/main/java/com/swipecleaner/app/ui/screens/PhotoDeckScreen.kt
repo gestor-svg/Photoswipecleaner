@@ -299,6 +299,8 @@ private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit
         }) {
             Text("Donar")
         }
+        }
+    }
 
 @Composable
 private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -> Unit) {
