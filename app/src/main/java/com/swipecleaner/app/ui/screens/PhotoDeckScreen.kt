@@ -289,13 +289,15 @@ private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit
             style = MaterialTheme.typography.bodySmall
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { /* TODO: enlazar con el sistema de tiers/Mercado Pago cuando exista */ }) {
-            Text("Donar (próximamente)")
+        OutlinedButton(onClick = {
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html")
+            )
+            context.startActivity(intent)
+        }) {
+            Text("Donar")
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Vuelve mañana para seguir gratis 🙂", style = MaterialTheme.typography.bodySmall)
-    }
-}
 
 @Composable
 private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -> Unit) {
