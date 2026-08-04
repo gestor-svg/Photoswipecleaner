@@ -15,7 +15,23 @@ android {
         versionName = "1.2"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Apunta explícitamente al keystore fijo restaurado por el
+            // workflow de Actions (secreto DEBUG_KEYSTORE_BASE64), en vez de
+            // confiar en que Gradle lo detecte solo por convención — así se
+            // elimina cualquier ambigüedad sobre qué ruta/keystore se usa.
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
