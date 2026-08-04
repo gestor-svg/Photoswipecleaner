@@ -34,6 +34,7 @@ fun PhotoDeckScreen(
 
     val state by viewModel.state.collectAsState()
     val loaded = state as? PhotoDeckState.Loaded
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val trashAction = rememberTrashOrchestrator(
         onFinished = { deletedCount -> viewModel.onTrashConfirmed(deletedCount) }
