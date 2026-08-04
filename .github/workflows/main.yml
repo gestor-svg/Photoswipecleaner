@@ -32,8 +32,26 @@ jobs:
           mkdir -p ~/.android
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore
 
+      - name: Verify restored keystore (falla el build si no es válido)
+        run: |
+          set -e
+          echo "Tamaño del archivo restaurado:"
+          ls -la ~/.android/debug.keystore
+          echo ""
+          echo "Fingerprint SHA256 del keystore restaurado (debe ser SIEMPRE el mismo en cada build):"
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep "SHA256:"
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
+
+      - name: Verify signed APK matches the fixed keystore
+        run: |
+          set -e
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n1)
+          APKSIGNER="${BUILD_TOOLS_DIR}apksigner"
+          echo "Fingerprint SHA256 del certificado que realmente firmó el APK:"
+          "$APKSIGNER" verify --print-certs "$APK_PATH" | grep "SHA-256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
