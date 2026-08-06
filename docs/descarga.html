@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Descargar PhotoSwipeCleaner</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --accent: #7FAE6A;
+    --text: #f2f2f2;
+    --text-muted: #a3a8b3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+    min-height: 100vh;
+  }
+  .container { max-width: 420px; width: 100%; text-align: center; }
+  .icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 22px;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  p.tagline { color: var(--text-muted); margin-top: 0; margin-bottom: 28px; font-size: 0.95rem; }
+
+  a.button {
+    display: block;
+    text-align: center;
+    background: var(--accent);
+    color: #0f1115;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 1rem;
+  }
+  .filesize { color: var(--text-muted); font-size: 0.8rem; margin-top: 8px; }
+
+  .steps {
+    text-align: left;
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-top: 28px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+  .steps h2 { color: var(--text); font-size: 0.95rem; margin: 0 0 8px; }
+
+  .donate-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: center;
+  }
+  .donate-card h2 { font-size: 1rem; margin: 0 0 6px; }
+  .donate-card p { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 14px; }
+  a.button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .note {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-top: 28px;
+    line-height: 1.5;
+  }
+  .note a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="container">
+    <img class="icon" src="icon.svg" alt="Ícono de PhotoSwipeCleaner">
+    <h1>PhotoSwipeCleaner</h1>
+    <p class="tagline">Limpia tu galería deslizando, como en las apps de citas — pero con tus fotos.</p>
+
+    <a class="button" href="https://github.com/gestor-svg/Photoswipecleaner/releases/latest/download/Photoswipecleaner.apk">
+      ⬇ Descargar APK
+    </a>
+    <div class="filesize">Android 8.0 o superior · ~10 MB</div>
+
+    <div class="steps">
+      <h2>Cómo instalarla</h2>
+      1. Descarga el archivo con el botón de arriba<br>
+      2. Ábrelo desde tus notificaciones o descargas<br>
+      3. Android va a advertir "fuente desconocida" — es normal, toca <strong>Instalar de todas formas</strong><br>
+      4. Abre la app y dale acceso a tus fotos
+    </div>
+
+    <div class="donate-card">
+      <h2>¿Ya la probaste y te gustó? 💛</h2>
+      <p>Cualquier donación te desbloquea 90 días de swipes ilimitados.</p>
+      <a class="button secondary" href="donar.html">Apoyar el proyecto</a>
+    </div>
+
+    <p class="note">
+      PhotoSwipeCleaner no tiene rastreadores ni recolecta datos — todo el
+      código es público en
+      <a href="https://github.com/gestor-svg/PhotoSwipeCleaner">GitHub</a>.
+    </p>
+  </div>
+</body>
+</html>

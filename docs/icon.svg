@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#0D47A1"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#D84315"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
+  
+  <g fill="#FF7043">
+    <rect x="110" y="240" width="16" height="16" rx="4"/>
+    <rect x="130" y="210" width="12" height="12" rx="3"/>
+    <rect x="145" y="265" width="20" height="20" rx="4"/>
+    <rect x="125" y="300" width="14" height="14" rx="3"/>
+    <rect x="160" y="320" width="18" height="18" rx="4"/>
+    <rect x="100" y="270" width="10" height="10" rx="2"/>
+    <rect x="170" y="190" width="14" height="14" rx="3"/>
+  </g>
+
+  <g transform="translate(180, 150) rotate(-15)">
+    <rect width="180" height="180" rx="15" fill="none" stroke="white" stroke-width="20"/>
+    <circle cx="130" cy="50" r="18" fill="white"/>
+    <path d="M 10 170 L 70 90 L 110 130 L 140 95 L 170 170 Z" fill="white"/>
+  </g>
+
+  <path d="M 230 380 C 320 380 400 300 420 210" fill="none" stroke="url(#arrowGrad)" stroke-width="28" stroke-linecap="round"/>
+  <polygon points="390,230 423,180 455,245" fill="#D84315" transform="rotate(20 420 210)"/>
+</svg>
