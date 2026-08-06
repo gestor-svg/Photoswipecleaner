@@ -50,6 +50,19 @@ class SwipeLimitManager(context: Context) {
         return if (storedDate == today()) prefs.getInt(KEY_COUNT, 0) else 0
     }
 
+    /**
+     * Timestamp (millis) de 23:59:59 del día actual — hora exacta en la que
+     * el cupo diario vuelve a estar disponible (en cuanto cambia la fecha).
+     * Se usa solo para el conteo regresivo visual de la pantalla de límite
+     * alcanzado, no para la lógica de reset en sí (que ya funciona por
+     * comparación de fecha string, independiente de esto).
+     */
+    fun resetAtMillis(): Long {
+        val now = java.time.LocalDateTime.now()
+        val endOfDay = now.toLocalDate().atTime(23, 59, 59)
+        return endOfDay.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+
     fun isMasterUnlocked(): Boolean = prefs.getBoolean(KEY_MASTER_UNLOCKED, false)
 
     fun isTier1Active(): Boolean = prefs.getLong(KEY_TIER1_EXPIRY, 0L) > System.currentTimeMillis()
