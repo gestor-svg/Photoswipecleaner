@@ -63,7 +63,7 @@ fun FolderSelectionScreen(
                             onClick = {
                                 menuExpanded = false
                                 val message = "Prueba PhotoSwipeCleaner, limpia tu galería con swipes 🧹📱\n" +
-                                    "Descárgala aquí: https://github.com/gestor-svg/PhotoSwipeCleaner/releases/latest"
+                                    "Descárgala aquí: https://gestor-svg.github.io/Photoswipecleaner/descarga.html"
                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, message)
