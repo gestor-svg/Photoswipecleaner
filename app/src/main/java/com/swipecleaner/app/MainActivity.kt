@@ -3,7 +3,6 @@ package com.swipecleaner.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -13,12 +12,13 @@ import com.swipecleaner.app.ui.PermissionGate
 import com.swipecleaner.app.ui.screens.AboutScreen
 import com.swipecleaner.app.ui.screens.FolderSelectionScreen
 import com.swipecleaner.app.ui.screens.PhotoDeckScreen
+import com.swipecleaner.app.ui.theme.PhotoSwipeCleanerTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            PhotoSwipeCleanerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     PermissionGate {
                         var selectedFolder by remember { mutableStateOf<BucketFolder?>(null) }
