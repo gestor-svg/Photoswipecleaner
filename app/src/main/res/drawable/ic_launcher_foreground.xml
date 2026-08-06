@@ -4,15 +4,30 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#C9A37A"
-        android:pathData="M34,30 h30 a8,8 0 0 1 8,8 v42 a8,8 0 0 1 -8,8 h-30 a8,8 0 0 1 -8,-8 v-42 a8,8 0 0 1 8,-8 z"
-        android:fillAlpha="0.95" />
-    <path
-        android:fillColor="#7FAE6A"
-        android:pathData="M48,54 l7,7 l13,-14"
-        android:strokeColor="#7FAE6A"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+
+    <group
+        android:name="icon_group"
+        android:translateX="22"
+        android:translateY="35.52"
+        android:scaleX="0.2903"
+        android:scaleY="0.2903"
+        android:rotation="-15">
+
+        <!-- Marco de foto -->
+        <path
+            android:pathData="M 15,0 L 165,0 A 15,15 0 0 1 180,15 L 180,165 A 15,15 0 0 1 165,180 L 15,180 A 15,15 0 0 1 0,165 L 0,15 A 15,15 0 0 1 15,0 Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="20"
+            android:fillColor="#00000000" />
+
+        <!-- Sol/circulo -->
+        <path
+            android:pathData="M 130,50 m -18,0 a 18,18 0 1 0 36,0 a 18,18 0 1 0 -36,0"
+            android:fillColor="#FFFFFF" />
+
+        <!-- Montañas / check -->
+        <path
+            android:pathData="M 10,170 L 70,90 L 110,130 L 140,95 L 170,170 Z"
+            android:fillColor="#FFFFFF" />
+    </group>
 </vector>
