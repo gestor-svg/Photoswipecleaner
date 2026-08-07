@@ -239,7 +239,8 @@ fun PhotoDeckScreen(
                                 } else {
                                     DeckSummary(
                                         state = s,
-                                        onConfirm = { requestConfirm() }
+                                         onConfirm = { requestConfirm() },
+                                         onBack = onBack
                                     )
                                 }
                             } else {
@@ -637,26 +638,83 @@ private fun formatSize(bytes: Long): String {
 }
 
 @Composable
-private fun DeckSummary(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (state.confirmedCount > 0) {
-            Text("Listo ✅", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(6.dp))
-            Text("${state.confirmedCount} fotos enviadas a la papelera del sistema en total")
-            Spacer(Modifier.height(4.dp))
-            Text("Se eliminarán automáticamente en 30 días", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(16.dp))
-        }
+private fun DeckSummary(state: PhotoDeckState.Loaded, onConfirm: () -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var phrase by remember { mutableStateOf(HumorPhrases.random()) }
 
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(24.dp).fillMaxWidth()
+    ) {
         if (state.trashCandidates.isEmpty()) {
-            if (state.confirmedCount == 0) {
-                Text("Carpeta revisada ✅")
-                Spacer(Modifier.height(4.dp))
-                Text("No marcaste ninguna foto para borrar", style = MaterialTheme.typography.bodySmall)
-            } else {
-                Text("Carpeta terminada", style = MaterialTheme.typography.bodySmall)
+            // 2f — Carpeta vacía: ya no queda nada pendiente.
+            Box(
+                modifier = Modifier.size(68.dp).background(PsColor.Green, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✓", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+            }
+            Spacer(Modifier.height(22.dp))
+            Text(
+                "¡Ya no hay nada que limpiar!",
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Revisaste todas las fotos de esta carpeta.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            if (state.confirmedCount > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "${state.confirmedCount} fotos enviadas a la papelera del sistema en total. Se eliminan automáticamente en 30 días.",
+                    style = PsTextStyle.Caption,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = 280.dp)
+                )
+            }
+            Spacer(Modifier.height(22.dp))
+
+            GradientButton(
+                text = "Volver a carpetas",
+                gradient = PsColor.GradBrand,
+                onClick = onBack,
+                height = 52.dp,
+                radius = 16.dp,
+                modifier = Modifier.fillMaxWidth(0.85f)
+            )
+            Spacer(Modifier.height(12.dp))
+            GradientButton(
+                text = "Donar y desbloquear 90 días",
+                gradient = PsColor.GradDonate,
+                onClick = {
+                    val intent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html")
+                    )
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(0.85f)
+            )
+            Spacer(Modifier.height(22.dp))
+
+            Text(
+                phrase,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 280.dp)
+            )
+            TextButton(onClick = { phrase = HumorPhrases.random(excluding = phrase) }) {
+                Text("↻ otra frase")
             }
         } else {
+            // Todavía hay fotos marcadas sin enviar al terminar el deck —
+            // fuera del alcance de 2f, se mantiene el flujo existente.
             Text("Carpeta revisada", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             Text(
