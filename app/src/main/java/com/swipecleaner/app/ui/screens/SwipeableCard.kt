@@ -1,6 +1,9 @@
 package com.swipecleaner.app.ui.screens
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
@@ -18,16 +21,16 @@ enum class SwipeDecision { LEFT, RIGHT }
 
 /**
  * Cada click en los botones manuales genera una solicitud con un `token`
- * único (incremental), no solo la dirección. Así dos clicks seguidos con la
- * misma dirección (ej. ✕ luego ✕) siempre son valores distintos y siempre
- * disparan una nueva animación — corrige el bug donde el botón dejaba de
- * responder tras varios clicks rápidos (el token viejo podía quedar
- * "atorado" porque dos clicks iguales no generaban un cambio detectable).
+ * único (incremental), no solo la dirección, para que dos clicks seguidos
+ * con la misma dirección siempre disparen la animación (ver lección de
+ * sesión anterior: el bug del botón atorado).
  */
 data class ManualSwipeRequest(val decision: SwipeDecision, val token: Int)
 
-private const val SWIPE_THRESHOLD_DP = 120
-private const val EXIT_DISTANCE_DP = 500
+// Valores del rediseño (handoff Claude Design, sección 3.2)
+private const val SWIPE_THRESHOLD_DP = 130
+private const val EXIT_DISTANCE_DP = 640
+private val SwipeEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
 @Composable
 fun SwipeableCard(
@@ -43,12 +46,12 @@ fun SwipeableCard(
 
     val rotation = (offsetX.value / 20f).coerceIn(-20f, 20f)
 
-    // Se relanza en cada click nuevo (el token siempre cambia), incluso si
-    // el click anterior seguía animando: cancela esa animación limpiamente
-    // y arranca la nueva desde la posición actual, sin quedar atorado.
     LaunchedEffect(manualTrigger) {
         val request = manualTrigger ?: return@LaunchedEffect
-        offsetX.animateTo(if (request.decision == SwipeDecision.RIGHT) exitPx else -exitPx)
+        offsetX.animateTo(
+            if (request.decision == SwipeDecision.RIGHT) exitPx else -exitPx,
+            tween(420, easing = SwipeEasing)
+        )
         onSwiped(request.decision)
         offsetX.snapTo(0f)
     }
@@ -67,16 +70,16 @@ fun SwipeableCard(
                         scope.launch {
                             when {
                                 offsetX.value > thresholdPx -> {
-                                    offsetX.animateTo(exitPx)
+                                    offsetX.animateTo(exitPx, tween(420, easing = SwipeEasing))
                                     onSwiped(SwipeDecision.RIGHT)
                                     offsetX.snapTo(0f)
                                 }
                                 offsetX.value < -thresholdPx -> {
-                                    offsetX.animateTo(-exitPx)
+                                    offsetX.animateTo(-exitPx, tween(420, easing = SwipeEasing))
                                     onSwiped(SwipeDecision.LEFT)
                                     offsetX.snapTo(0f)
                                 }
-                                else -> offsetX.animateTo(0f)
+                                else -> offsetX.animateTo(0f, spring())
                             }
                         }
                     }

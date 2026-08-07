@@ -3,22 +3,33 @@
 package com.swipecleaner.app.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import com.swipecleaner.app.domain.BucketFolder
 import com.swipecleaner.app.domain.PhotoItem
 import com.swipecleaner.app.domain.SwipeDirection
+import com.swipecleaner.app.ui.theme.PsColor
+import com.swipecleaner.app.ui.theme.PsRadius
+import com.swipecleaner.app.ui.theme.PsTextStyle
 import com.swipecleaner.app.ui.trash.rememberTrashOrchestrator
 import java.util.Locale
 
@@ -49,6 +60,9 @@ fun PhotoDeckScreen(
     )
 
     // Mensaje de celebración al confirmar ("¡Felicidades! Vas a liberar X").
+    // NOTA: esto se reemplaza por el bottom sheet de confirmación (2b) + el
+    // snackbar de resultado (2c) en el siguiente bloque del rediseño — se
+    // deja tal cual por ahora para no romper el flujo de "Confirmar".
     var celebrateMessage by remember { mutableStateOf<String?>(null) }
 
     fun confirmWithCelebration(photos: List<PhotoItem>, freedBytes: Long) {
@@ -118,10 +132,6 @@ fun PhotoDeckScreen(
             },
             actions = {
                 TextButton(
-                    onClick = { viewModel.undo() },
-                    enabled = loaded?.history?.isNotEmpty() == true
-                ) { Text("Deshacer") }
-                TextButton(
                     onClick = { loaded?.let { confirmWithCelebration(it.trashCandidates, it.freedBytes) } },
                     enabled = loaded?.trashCandidates?.isNotEmpty() == true
                 ) { Text("Confirmar") }
@@ -130,17 +140,24 @@ fun PhotoDeckScreen(
     }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            if (loaded != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.fillMaxWidth()
+            if (loaded != null && loaded.currentIndex < loaded.photos.size) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Revisadas ${loaded.currentIndex.coerceAtMost(loaded.photos.size)} de ${loaded.photos.size} · " +
-                            "${formatSize(loaded.freedBytes)} marcados para papelera" +
+                        "${loaded.currentIndex + 1} / ${loaded.photos.size} · ${folder.name}",
+                        style = PsTextStyle.DeckHeader,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "${formatSize(loaded.freedBytes)} marcados para papelera" +
                             if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall
+                        style = PsTextStyle.Caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -190,12 +207,26 @@ fun PhotoDeckScreen(
 
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.85f)
-                                    .aspectRatio(0.75f),
+                                    .fillMaxWidth(0.78f)
+                                    .aspectRatio(0.9f),
                                 contentAlignment = Alignment.Center
                             ) {
+                                // Tarjeta de atrás — "mazo" decorativo, pero con la
+                                // foto siguiente REAL (decisión del usuario: mantener
+                                // el adelanto útil, no dejarla puramente decorativa).
                                 if (next != null) {
-                                    Card(modifier = Modifier.fillMaxSize()) {
+                                    Card(
+                                        shape = RoundedCornerShape(PsRadius.PhotoCard),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer {
+                                                rotationZ = -3f
+                                                scaleX = 0.96f
+                                                scaleY = 0.96f
+                                                translationY = 10.dp.toPx()
+                                                alpha = 0.55f
+                                            }
+                                    ) {
                                         PhotoCardImage(uri = next.uri, contentDescription = null)
                                     }
                                 }
@@ -208,20 +239,38 @@ fun PhotoDeckScreen(
                                         viewModel.onSwipe(direction)
                                     }
                                 ) { progressPx ->
-                                    Card(modifier = Modifier.fillMaxSize()) {
+                                    val rightAlpha = if (progressPx > 0) (progressPx / 120f).coerceIn(0f, 1f) else 0f
+                                    val leftAlpha = if (progressPx < 0) (-progressPx / 120f).coerceIn(0f, 1f) else 0f
+                                    val dragAlpha = (kotlin.math.abs(progressPx) / 130f).coerceIn(0f, 1f)
+                                    val ringColor = when {
+                                        progressPx > 0 -> PsColor.Green
+                                        progressPx < 0 -> PsColor.Orange
+                                        else -> Color.Transparent
+                                    }
+                                    val ringWidth = lerp(0.dp, 3.dp, dragAlpha)
+
+                                    Card(
+                                        shape = RoundedCornerShape(PsRadius.PhotoCard),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .border(ringWidth, ringColor.copy(alpha = dragAlpha), RoundedCornerShape(PsRadius.PhotoCard))
+                                    ) {
                                         Box {
                                             PhotoCardImage(uri = top.uri, contentDescription = top.displayName)
-                                            val leftAlpha = (-progressPx / 300f).coerceIn(0f, 1f)
-                                            val rightAlpha = (progressPx / 300f).coerceIn(0f, 1f)
-                                            Text(
-                                                "PAPELERA",
-                                                color = Color(0xFFE2685F).copy(alpha = leftAlpha),
-                                                modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+
+                                            // Insignia BORRAR (naranja, arriba-izquierda)
+                                            SwipeBadge(
+                                                symbol = "✕",
+                                                color = PsColor.Orange,
+                                                alpha = leftAlpha,
+                                                modifier = Modifier.align(Alignment.TopStart).padding(14.dp)
                                             )
-                                            Text(
-                                                "CONSERVAR",
-                                                color = Color(0xFF7FAE6A).copy(alpha = rightAlpha),
-                                                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                                            // Insignia CONSERVAR (verde, arriba-derecha)
+                                            SwipeBadge(
+                                                symbol = "✓",
+                                                color = PsColor.Green,
+                                                alpha = rightAlpha,
+                                                modifier = Modifier.align(Alignment.TopEnd).padding(14.dp)
                                             )
                                         }
                                     }
@@ -232,34 +281,105 @@ fun PhotoDeckScreen(
                 }
             }
 
-            // Botones manuales ✕/✓ — ocultos si ya se llegó al límite diario.
+            // Fila de acciones: deshacer (círculo) + borrar/conservar (píldoras).
+            // Oculta si ya se llegó al límite diario.
             if (loaded != null && loaded.remainingSwipesToday > 0 && loaded.currentIndex < loaded.photos.size) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    OutlinedButton(onClick = {
-                        manualSwipeCounter++
-                        manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
-                    }) {
-                        Text("✕  Borrar")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        UndoCircleButton(
+                            enabled = loaded.history.isNotEmpty(),
+                            onClick = { viewModel.undo() }
+                        )
+                        ActionPillButton(
+                            symbol = "✕",
+                            label = "Borrar",
+                            tint = PsColor.Orange,
+                            onClick = {
+                                manualSwipeCounter++
+                                manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
+                            }
+                        )
+                        ActionPillButton(
+                            symbol = "✓",
+                            label = "Conservar",
+                            tint = PsColor.Green,
+                            onClick = {
+                                manualSwipeCounter++
+                                manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
+                            }
+                        )
                     }
-                    OutlinedButton(onClick = {
-                        manualSwipeCounter++
-                        manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
-                    }) {
-                        Text("✓  Conservar")
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Deshacer última acción",
+                        style = PsTextStyle.Caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+                    )
                 }
             }
         }
     }
 }
 
+@Composable
+private fun SwipeBadge(symbol: String, color: Color, alpha: Float, modifier: Modifier = Modifier) {
+    if (alpha <= 0f) return
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .background(color.copy(alpha = alpha), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(symbol, color = Color.White.copy(alpha = alpha), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun UndoCircleButton(enabled: Boolean, onClick: () -> Unit) {
+    val borderColor = if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .border(BorderStroke(1.dp, borderColor), CircleShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("↩", color = contentColor, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun ActionPillButton(symbol: String, label: String, tint: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = 10.dp,
+        modifier = Modifier.size(width = 88.dp, height = 64.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(symbol, color = tint, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(2.dp))
+            Text(label, color = MaterialTheme.colorScheme.onSurface, style = PsTextStyle.Caption)
+        }
+    }
+}
+
 /**
  * Pantalla que reemplaza el deck cuando se agotó el cupo diario de 30
- * swipes. Muestra lo liberado hoy, lo que falta en esta carpeta, y un botón
- * de donar como placeholder (aún no existe el sistema de tiers/pago real).
+ * swipes. Sin cambios visuales en este bloque — su rediseño (2d, con
+ * conteo regresivo) es un bloque aparte.
  */
 @Composable
 private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
@@ -301,8 +421,8 @@ private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit
         }) {
             Text("Donar")
         }
-        }
     }
+}
 
 @Composable
 private fun CorruptedFilesBanner(count: Int, onSend: () -> Unit, onDismiss: () -> Unit) {
