@@ -2,6 +2,8 @@
 
 package com.swipecleaner.app.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -15,23 +17,31 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
+import com.swipecleaner.app.data.SwipeLimitManager
 import com.swipecleaner.app.domain.BucketFolder
 import com.swipecleaner.app.domain.PhotoItem
 import com.swipecleaner.app.domain.SwipeDirection
+import com.swipecleaner.app.ui.theme.GradientButton
+import com.swipecleaner.app.ui.theme.HumorPhrases
 import com.swipecleaner.app.ui.theme.PsColor
 import com.swipecleaner.app.ui.theme.PsRadius
 import com.swipecleaner.app.ui.theme.PsTextStyle
 import com.swipecleaner.app.ui.trash.rememberTrashOrchestrator
+import kotlinx.coroutines.delay
 import java.util.Locale
+
+private data class ResultSnackbarData(val count: Int, val freedBytes: Long)
 
 @Composable
 fun PhotoDeckScreen(
@@ -45,10 +55,22 @@ fun PhotoDeckScreen(
 
     val state by viewModel.state.collectAsState()
     val loaded = state as? PhotoDeckState.Loaded
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+
+    // Snapshot del lote que se está confirmando — se captura al momento de
+    // confirmar porque el estado (freedBytes/history) se limpia apenas
+    // termina el envío, y el snackbar necesita esos números después.
+    var pendingConfirmSnapshot by remember { mutableStateOf<ResultSnackbarData?>(null) }
+    var resultSnackbar by remember { mutableStateOf<ResultSnackbarData?>(null) }
 
     val trashAction = rememberTrashOrchestrator(
-        onFinished = { deletedCount -> viewModel.onTrashConfirmed(deletedCount) }
+        onFinished = { deletedCount ->
+            viewModel.onTrashConfirmed(deletedCount)
+            pendingConfirmSnapshot?.let { snap ->
+                resultSnackbar = ResultSnackbarData(deletedCount, snap.freedBytes)
+            }
+            pendingConfirmSnapshot = null
+        }
     )
 
     var pendingCorruptedBatch by remember { mutableStateOf<List<PhotoItem>>(emptyList()) }
@@ -59,16 +81,20 @@ fun PhotoDeckScreen(
         }
     )
 
-    // Mensaje de celebración al confirmar ("¡Felicidades! Vas a liberar X").
-    // NOTA: esto se reemplaza por el bottom sheet de confirmación (2b) + el
-    // snackbar de resultado (2c) en el siguiente bloque del rediseño — se
-    // deja tal cual por ahora para no romper el flujo de "Confirmar".
-    var celebrateMessage by remember { mutableStateOf<String?>(null) }
+    resultSnackbar?.let { data ->
+        LaunchedEffect(data) {
+            delay(3000)
+            resultSnackbar = null
+        }
+    }
 
-    fun confirmWithCelebration(photos: List<PhotoItem>, freedBytes: Long) {
-        if (photos.isEmpty()) return
-        celebrateMessage = "¡Felicidades! Vas a liberar ${formatSize(freedBytes)} 🎉"
-        trashAction(photos)
+    // Bottom sheet de confirmación (2b) — reemplaza el envío directo de antes.
+    var showConfirmSheet by remember { mutableStateOf(false) }
+
+    fun requestConfirm() {
+        if (loaded != null && loaded.trashCandidates.isNotEmpty()) {
+            showConfirmSheet = true
+        }
     }
 
     var showExitDialog by remember { mutableStateOf(false) }
@@ -91,7 +117,10 @@ fun PhotoDeckScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showExitDialog = false
-                    loaded?.let { trashAction(it.trashCandidates) }
+                    loaded?.let {
+                        pendingConfirmSnapshot = ResultSnackbarData(it.trashCandidates.size, it.freedBytes)
+                        trashAction(it.trashCandidates)
+                    }
                     onBack()
                 }) { Text("Enviar y salir") }
             },
@@ -107,171 +136,178 @@ fun PhotoDeckScreen(
         )
     }
 
-    celebrateMessage?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { celebrateMessage = null },
-            confirmButton = {
-                TextButton(onClick = { celebrateMessage = null }) { Text("¡Genial!") }
-            },
-            text = { Text(msg) }
-        )
+    if (showConfirmSheet && loaded != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showConfirmSheet = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(topStart = PsRadius.BottomSheetTop, topEnd = PsRadius.BottomSheetTop)
+        ) {
+            ConfirmDeleteSheetContent(
+                count = loaded.trashCandidates.size,
+                freedBytes = loaded.freedBytes,
+                onCancel = { showConfirmSheet = false },
+                onConfirm = {
+                    pendingConfirmSnapshot = ResultSnackbarData(loaded.trashCandidates.size, loaded.freedBytes)
+                    trashAction(loaded.trashCandidates)
+                    showConfirmSheet = false
+                }
+            )
+        }
     }
 
-    // Disparador de swipe manual desde los botones ✕/✓. Cada click suma un
-    // token nuevo para que nunca se pierda un click (ver ManualSwipeRequest).
     var manualSwipeCounter by remember { mutableStateOf(0) }
     var manualSwipe by remember { mutableStateOf<ManualSwipeRequest?>(null) }
 
     var corruptedBannerDismissed by remember(loaded?.corruptedPhotos) { mutableStateOf(false) }
 
-    Scaffold(topBar = {
-        TopAppBar(
-            title = { Text(folder.name) },
-            navigationIcon = {
-                TextButton(onClick = { requestExit() }) { Text("← Carpetas") }
-            },
-            actions = {
-                TextButton(
-                    onClick = { loaded?.let { confirmWithCelebration(it.trashCandidates, it.freedBytes) } },
-                    enabled = loaded?.trashCandidates?.isNotEmpty() == true
-                ) { Text("Confirmar") }
-            }
-        )
-    }) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(topBar = {
+            TopAppBar(
+                title = { Text(folder.name) },
+                navigationIcon = {
+                    TextButton(onClick = { requestExit() }) { Text("← Carpetas") }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { requestConfirm() },
+                        enabled = loaded?.trashCandidates?.isNotEmpty() == true
+                    ) { Text("Confirmar") }
+                }
+            )
+        }) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            if (loaded != null && loaded.currentIndex < loaded.photos.size) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "${loaded.currentIndex + 1} / ${loaded.photos.size} · ${folder.name}",
-                        style = PsTextStyle.DeckHeader,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "${formatSize(loaded.freedBytes)} marcados para papelera" +
-                            if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
-                        style = PsTextStyle.Caption,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                if (loaded != null && loaded.currentIndex < loaded.photos.size) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "${loaded.currentIndex + 1} / ${loaded.photos.size} · ${folder.name}",
+                            style = PsTextStyle.DeckHeader,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "${formatSize(loaded.freedBytes)} marcados para papelera" +
+                                if (loaded.confirmedCount > 0) " · ${loaded.confirmedCount} ya enviadas" else "",
+                            style = PsTextStyle.Caption,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                val corrupted = loaded?.corruptedPhotos.orEmpty()
+                if (corrupted.isNotEmpty() && !corruptedBannerDismissed) {
+                    CorruptedFilesBanner(
+                        count = corrupted.size,
+                        onSend = {
+                            pendingCorruptedBatch = corrupted
+                            corruptedTrashAction(corrupted)
+                        },
+                        onDismiss = { corruptedBannerDismissed = true }
                     )
                 }
-            }
 
-            val corrupted = loaded?.corruptedPhotos.orEmpty()
-            if (corrupted.isNotEmpty() && !corruptedBannerDismissed) {
-                CorruptedFilesBanner(
-                    count = corrupted.size,
-                    onSend = {
-                        pendingCorruptedBatch = corrupted
-                        corruptedTrashAction(corrupted)
-                    },
-                    onDismiss = { corruptedBannerDismissed = true }
-                )
-            }
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (val s = state) {
+                        is PhotoDeckState.Loading -> CircularProgressIndicator()
 
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                when (val s = state) {
-                    is PhotoDeckState.Loading -> CircularProgressIndicator()
+                        is PhotoDeckState.Error -> Text("Error: ${s.message}")
 
-                    is PhotoDeckState.Error -> Text("Error: ${s.message}")
+                        is PhotoDeckState.Loaded -> {
+                            val photos = s.photos
+                            val index = s.currentIndex
 
-                    is PhotoDeckState.Loaded -> {
-                        val photos = s.photos
-                        val index = s.currentIndex
-
-                        if (s.remainingSwipesToday <= 0) {
-                            LimitReachedView(
-                                state = s,
-                                onConfirm = { trashAction(s.trashCandidates) }
-                            )
-                        } else if (index >= photos.size) {
-                            if (photos.isEmpty()) {
-                                Text("Esta carpeta no tiene fotos")
-                            } else {
-                                DeckSummary(
+                            if (s.remainingSwipesToday <= 0) {
+                                LimitReachedView(
                                     state = s,
-                                    onConfirm = { confirmWithCelebration(s.trashCandidates, s.freedBytes) }
+                                    onSendMarked = {
+                                        pendingConfirmSnapshot = ResultSnackbarData(s.trashCandidates.size, s.freedBytes)
+                                        trashAction(s.trashCandidates)
+                                    },
+                                    onBack = onBack
                                 )
-                            }
-                        } else {
-                            val top = photos[index]
-                            val next = photos.getOrNull(index + 1)
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.78f)
-                                    .aspectRatio(0.9f),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Tarjeta de atrás — "mazo" decorativo, pero con la
-                                // foto siguiente REAL (decisión del usuario: mantener
-                                // el adelanto útil, no dejarla puramente decorativa).
-                                if (next != null) {
-                                    Card(
-                                        shape = RoundedCornerShape(PsRadius.PhotoCard),
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .graphicsLayer {
-                                                rotationZ = -3f
-                                                scaleX = 0.96f
-                                                scaleY = 0.96f
-                                                translationY = 10.dp.toPx()
-                                                alpha = 0.55f
-                                            }
-                                    ) {
-                                        PhotoCardImage(uri = next.uri, contentDescription = null)
-                                    }
+                            } else if (index >= photos.size) {
+                                if (photos.isEmpty()) {
+                                    Text("Esta carpeta no tiene fotos")
+                                } else {
+                                    DeckSummary(
+                                        state = s,
+                                        onConfirm = { requestConfirm() }
+                                    )
                                 }
+                            } else {
+                                val top = photos[index]
+                                val next = photos.getOrNull(index + 1)
 
-                                SwipeableCard(
-                                    manualTrigger = manualSwipe,
-                                    onSwiped = { decision ->
-                                        val direction = if (decision == SwipeDecision.LEFT)
-                                            SwipeDirection.LEFT else SwipeDirection.RIGHT
-                                        viewModel.onSwipe(direction)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.78f)
+                                        .aspectRatio(0.9f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (next != null) {
+                                        Card(
+                                            shape = RoundedCornerShape(PsRadius.PhotoCard),
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    rotationZ = -3f
+                                                    scaleX = 0.96f
+                                                    scaleY = 0.96f
+                                                    translationY = 10.dp.toPx()
+                                                    alpha = 0.55f
+                                                }
+                                        ) {
+                                            PhotoCardImage(uri = next.uri, contentDescription = null)
+                                        }
                                     }
-                                ) { progressPx ->
-                                    val rightAlpha = if (progressPx > 0) (progressPx / 120f).coerceIn(0f, 1f) else 0f
-                                    val leftAlpha = if (progressPx < 0) (-progressPx / 120f).coerceIn(0f, 1f) else 0f
-                                    val dragAlpha = (kotlin.math.abs(progressPx) / 130f).coerceIn(0f, 1f)
-                                    val ringColor = when {
-                                        progressPx > 0 -> PsColor.Green
-                                        progressPx < 0 -> PsColor.Orange
-                                        else -> Color.Transparent
-                                    }
-                                    val ringWidth = lerp(0.dp, 3.dp, dragAlpha)
 
-                                    Card(
-                                        shape = RoundedCornerShape(PsRadius.PhotoCard),
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .border(ringWidth, ringColor.copy(alpha = dragAlpha), RoundedCornerShape(PsRadius.PhotoCard))
-                                    ) {
-                                        Box {
-                                            PhotoCardImage(uri = top.uri, contentDescription = top.displayName)
+                                    SwipeableCard(
+                                        manualTrigger = manualSwipe,
+                                        onSwiped = { decision ->
+                                            val direction = if (decision == SwipeDecision.LEFT)
+                                                SwipeDirection.LEFT else SwipeDirection.RIGHT
+                                            viewModel.onSwipe(direction)
+                                        }
+                                    ) { progressPx ->
+                                        val rightAlpha = if (progressPx > 0) (progressPx / 120f).coerceIn(0f, 1f) else 0f
+                                        val leftAlpha = if (progressPx < 0) (-progressPx / 120f).coerceIn(0f, 1f) else 0f
+                                        val dragAlpha = (kotlin.math.abs(progressPx) / 130f).coerceIn(0f, 1f)
+                                        val ringColor = when {
+                                            progressPx > 0 -> PsColor.Green
+                                            progressPx < 0 -> PsColor.Orange
+                                            else -> Color.Transparent
+                                        }
+                                        val ringWidth = lerp(0.dp, 3.dp, dragAlpha)
 
-                                            // Insignia BORRAR (naranja, arriba-izquierda)
-                                            SwipeBadge(
-                                                symbol = "✕",
-                                                color = PsColor.Orange,
-                                                alpha = leftAlpha,
-                                                modifier = Modifier.align(Alignment.TopStart).padding(14.dp)
-                                            )
-                                            // Insignia CONSERVAR (verde, arriba-derecha)
-                                            SwipeBadge(
-                                                symbol = "✓",
-                                                color = PsColor.Green,
-                                                alpha = rightAlpha,
-                                                modifier = Modifier.align(Alignment.TopEnd).padding(14.dp)
-                                            )
+                                        Card(
+                                            shape = RoundedCornerShape(PsRadius.PhotoCard),
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .border(ringWidth, ringColor.copy(alpha = dragAlpha), RoundedCornerShape(PsRadius.PhotoCard))
+                                        ) {
+                                            Box {
+                                                PhotoCardImage(uri = top.uri, contentDescription = top.displayName)
+                                                SwipeBadge(
+                                                    symbol = "✕",
+                                                    color = PsColor.Orange,
+                                                    alpha = leftAlpha,
+                                                    modifier = Modifier.align(Alignment.TopStart).padding(14.dp)
+                                                )
+                                                SwipeBadge(
+                                                    symbol = "✓",
+                                                    color = PsColor.Green,
+                                                    alpha = rightAlpha,
+                                                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -279,49 +315,130 @@ fun PhotoDeckScreen(
                         }
                     }
                 }
-            }
 
-            // Fila de acciones: deshacer (círculo) + borrar/conservar (píldoras).
-            // Oculta si ya se llegó al límite diario.
-            if (loaded != null && loaded.remainingSwipesToday > 0 && loaded.currentIndex < loaded.photos.size) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (loaded != null && loaded.remainingSwipesToday > 0 && loaded.currentIndex < loaded.photos.size) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        UndoCircleButton(
-                            enabled = loaded.history.isNotEmpty(),
-                            onClick = { viewModel.undo() }
-                        )
-                        ActionPillButton(
-                            symbol = "✕",
-                            label = "Borrar",
-                            tint = PsColor.Orange,
-                            onClick = {
-                                manualSwipeCounter++
-                                manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
-                            }
-                        )
-                        ActionPillButton(
-                            symbol = "✓",
-                            label = "Conservar",
-                            tint = PsColor.Green,
-                            onClick = {
-                                manualSwipeCounter++
-                                manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
-                            }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            UndoCircleButton(
+                                enabled = loaded.history.isNotEmpty(),
+                                onClick = { viewModel.undo() }
+                            )
+                            ActionPillButton(
+                                symbol = "✕",
+                                label = "Borrar",
+                                tint = PsColor.Orange,
+                                onClick = {
+                                    manualSwipeCounter++
+                                    manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
+                                }
+                            )
+                            ActionPillButton(
+                                symbol = "✓",
+                                label = "Conservar",
+                                tint = PsColor.Green,
+                                onClick = {
+                                    manualSwipeCounter++
+                                    manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
+                                }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Deshacer última acción",
+                            style = PsTextStyle.Caption,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Deshacer última acción",
-                        style = PsTextStyle.Caption,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
-                    )
                 }
+            }
+        }
+
+        resultSnackbar?.let { data ->
+            ResultSnackbar(
+                data = data,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmDeleteSheetContent(count: Int, freedBytes: Long, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 28.dp, top = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "¿Borrar $count foto${if (count == 1) "" else "s"}?",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Se liberarán ${formatSize(freedBytes)} de espacio. Esta acción no se puede deshacer.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Cancelar") }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .background(PsColor.GradDelete)
+                    .clickable(onClick = onConfirm),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Confirmar", color = Color.White, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultSnackbar(data: ResultSnackbarData, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, PsColor.Green.copy(alpha = 0.3f)),
+        shadowElevation = 12.dp,
+        modifier = modifier.padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(32.dp).background(PsColor.Green, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✓", color = Color.White, style = MaterialTheme.typography.labelLarge)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("¡Liberaste ${formatSize(data.freedBytes)}!", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "${data.count} foto${if (data.count == 1) "" else "s"} menos en tu galería",
+                    style = PsTextStyle.Caption,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -377,49 +494,84 @@ private fun ActionPillButton(symbol: String, label: String, tint: Color, onClick
 }
 
 /**
- * Pantalla que reemplaza el deck cuando se agotó el cupo diario de 30
- * swipes. Sin cambios visuales en este bloque — su rediseño (2d, con
- * conteo regresivo) es un bloque aparte.
+ * Pantalla de límite diario alcanzado (2d), con frase de humor y conteo
+ * regresivo en vivo contra la hora exacta de reset (23:59:59 de hoy).
  */
 @Composable
-private fun LimitReachedView(state: PhotoDeckState.Loaded, onConfirm: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+private fun LimitReachedView(
+    state: PhotoDeckState.Loaded,
+    onSendMarked: () -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val swipeLimitManager = remember { SwipeLimitManager(context) }
+    var phrase by remember { mutableStateOf(HumorPhrases.random()) }
+    var remainingMillis by remember {
+        mutableStateOf((swipeLimitManager.resetAtMillis() - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            remainingMillis = (swipeLimitManager.resetAtMillis() - System.currentTimeMillis()).coerceAtLeast(0)
+            delay(60_000)
+        }
+    }
+    val totalMinutes = (remainingMillis / 60_000).toInt()
+    val hh = totalMinutes / 60
+    val mm = totalMinutes % 60
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(24.dp)
+        modifier = Modifier.padding(24.dp).fillMaxWidth()
     ) {
-        Text("Por hoy ya revisaste tus 30 fotos gratis 🙌", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Llevas liberado ${formatSize(state.freedBytes + state.confirmedBytes)} en total hoy.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        if (state.currentIndex < state.photos.size) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Te faltan ${state.photos.size - state.currentIndex} fotos por revisar en esta carpeta.",
-                style = MaterialTheme.typography.bodySmall
-            )
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .background(Brush.linearGradient(listOf(PsColor.Yellow, PsColor.Orange)), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("⏰", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(Modifier.height(16.dp))
-        if (state.trashCandidates.isNotEmpty()) {
-            Button(onClick = onConfirm) { Text("Enviar lo marcado a la papelera") }
-            Spacer(Modifier.height(12.dp))
-        }
         Text(
-            "Si quieres seguir liberando espacio hoy mismo, es muy fácil: ayúdanos donando 💛",
-            style = MaterialTheme.typography.bodySmall
+            "Se acabaron tus swipes de hoy",
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = {
-            val intent = android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html")
-            )
-            context.startActivity(intent)
-        }) {
-            Text("Donar")
+        Spacer(Modifier.height(10.dp))
+        Text(
+            phrase,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 280.dp)
+        )
+        TextButton(onClick = { phrase = HumorPhrases.random(excluding = phrase) }) {
+            Text("↻ otra frase")
+        }
+
+        if (state.trashCandidates.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = onSendMarked) { Text("Enviar lo marcado a la papelera") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        GradientButton(
+            text = "Donar y desbloquear 90 días",
+            gradient = PsColor.GradDonate,
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html"))
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth(0.9f)
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(0.9f).height(52.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("⏱ Esperar ${hh}h ${mm}m")
         }
     }
 }
