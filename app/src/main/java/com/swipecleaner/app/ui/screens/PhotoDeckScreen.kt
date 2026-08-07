@@ -99,6 +99,8 @@ fun PhotoDeckScreen(
     }
 
     var showExitDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var deckMenuExpanded by remember { mutableStateOf(false) }
 
     fun requestExit() {
         if (loaded != null && loaded.trashCandidates.isNotEmpty()) {
@@ -133,6 +135,23 @@ fun PhotoDeckScreen(
                     }) { Text("Salir sin cambios") }
                     TextButton(onClick = { showExitDialog = false }) { Text("Cancelar") }
                 }
+            }
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("¿Ver esta carpeta desde el principio?") },
+            text = { Text("Vas a volver a ver las fotos que ya habías marcado como conservar. No se borra nada.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetDialog = false
+                    viewModel.resetFolderProgress(folder.bucketId)
+                }) { Text("Ver desde el principio") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("Cancelar") }
             }
         )
     }
@@ -173,6 +192,21 @@ fun PhotoDeckScreen(
                         onClick = { requestConfirm() },
                         enabled = loaded?.trashCandidates?.isNotEmpty() == true
                     ) { Text("Confirmar") }
+
+                    Box {
+                        TextButton(onClick = { deckMenuExpanded = true }) {
+                            Text("⋮", style = MaterialTheme.typography.titleLarge)
+                        }
+                        DropdownMenu(expanded = deckMenuExpanded, onDismissRequest = { deckMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Ver desde el principio") },
+                                onClick = {
+                                    deckMenuExpanded = false
+                                    showResetDialog = true
+                                }
+                            )
+                        }
+                    }
                 }
             )
         }) { padding ->
@@ -240,8 +274,8 @@ fun PhotoDeckScreen(
                                 } else {
                                     DeckSummary(
                                         state = s,
-                                         onConfirm = { requestConfirm() },
-                                         onBack = onBack
+                                        onConfirm = { requestConfirm() },
+                                        onBack = onBack
                                     )
                                 }
                             } else {
@@ -403,7 +437,7 @@ private fun ConfirmDeleteSheetContent(count: Int, freedBytes: Long, onCancel: ()
                 modifier = Modifier
                     .weight(1f)
                     .height(52.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(PsColor.GradDelete)
                     .clickable(onClick = onConfirm),
                 contentAlignment = Alignment.Center
