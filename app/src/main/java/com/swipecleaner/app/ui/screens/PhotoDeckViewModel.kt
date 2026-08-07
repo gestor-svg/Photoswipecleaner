@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.swipecleaner.app.data.DAILY_SWIPE_LIMIT
+import com.swipecleaner.app.data.FolderProgressManager
 import com.swipecleaner.app.data.MediaRepository
 import com.swipecleaner.app.data.SwipeLimitManager
 import com.swipecleaner.app.domain.PhotoItem
@@ -26,7 +27,6 @@ sealed interface PhotoDeckState {
         val confirmedCount: Int = 0,
         val confirmedBytes: Long = 0L,
         val corruptedPhotos: List<PhotoItem> = emptyList(),
-        // Swipes restantes hoy (0..30), independiente de la carpeta.
         val remainingSwipesToday: Int = DAILY_SWIPE_LIMIT
     ) : PhotoDeckState {
         val trashCandidates: List<PhotoItem>
@@ -39,6 +39,7 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val repository = MediaRepository(application)
     private val swipeLimitManager = SwipeLimitManager(application)
+    private val folderProgressManager = FolderProgressManager(application)
 
     private val _state = MutableStateFlow<PhotoDeckState>(PhotoDeckState.Loading)
     val state: StateFlow<PhotoDeckState> = _state.asStateFlow()
@@ -46,12 +47,24 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentBucketId: String? = null
 
     fun loadPhotos(bucketId: String) {
-        if (currentBucketId == bucketId && _state.value is PhotoDeckState.Loaded) return
+        if (currentBucketId == bucketId && _state.value is PhotoDeckState.Loaded) {
+            // Ya estaba cargada esta carpeta — igual refresca el cupo de
+            // swipes, por si el usuario se desbloqueó mientras estaba en
+            // otra pantalla (ej. "Acerca de"). Evita tener que reiniciar
+            // la app para que el desbloqueo surta efecto.
+            val current = _state.value as PhotoDeckState.Loaded
+            _state.value = current.copy(remainingSwipesToday = swipeLimitManager.remaining())
+            return
+        }
         currentBucketId = bucketId
         _state.value = PhotoDeckState.Loading
         viewModelScope.launch {
             try {
-                val photos = repository.getPhotosInFolder(bucketId)
+                val allPhotos = repository.getPhotosInFolder(bucketId)
+                // Retoma el progreso: excluye fotos ya marcadas "conservar"
+                // en visitas anteriores a esta carpeta.
+                val keptIds = folderProgressManager.getKeptIds(bucketId)
+                val photos = allPhotos.filterNot { it.id in keptIds }
                 _state.value = PhotoDeckState.Loaded(
                     photos = photos,
                     remainingSwipesToday = swipeLimitManager.remaining()
@@ -61,6 +74,13 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
                 _state.value = PhotoDeckState.Error(e.message ?: "Error al cargar fotos")
             }
         }
+    }
+
+    /** "Ver desde el principio" — olvida el progreso guardado y recarga todo. */
+    fun resetFolderProgress(bucketId: String) {
+        folderProgressManager.resetFolder(bucketId)
+        currentBucketId = null // fuerza una recarga completa, ignorando el caché de "ya cargada"
+        loadPhotos(bucketId)
     }
 
     private fun scanForCorruptedFiles(photos: List<PhotoItem>) {
@@ -89,9 +109,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     fun onSwipe(direction: SwipeDirection) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
-        // Límite diario ya alcanzado: ignora el intento de swipe. La UI no
-        // debería permitir llegar aquí (oculta el gesto/botones), esto es
-        // un resguardo adicional.
         if (s.remainingSwipesToday <= 0) return
 
         val photo = s.photos.getOrNull(s.currentIndex) ?: return
@@ -99,24 +116,32 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         val freedDelta = if (direction == SwipeDirection.LEFT) photo.sizeBytes else 0L
         swipeLimitManager.registerSwipe()
 
+        // Recuerda las "conservadas" para no volver a mostrarlas en la
+        // próxima visita a esta carpeta.
+        if (direction == SwipeDirection.RIGHT) {
+            currentBucketId?.let { folderProgressManager.addKeptId(it, photo.id) }
+        }
+
         _state.value = s.copy(
             currentIndex = s.currentIndex + 1,
             history = s.history + result,
             freedBytes = s.freedBytes + freedDelta,
-            // Se relee del manager (no se recalcula a mano) para que respete
-            // el estado "desbloqueado" por código maestro correctamente.
             remainingSwipesToday = swipeLimitManager.remaining()
         )
     }
-    /**
-     * Deshacer NO devuelve cupo del límite diario a propósito: si lo hiciera,
-     * swipe→deshacer→swipe repetido evadiría el límite por completo.
-     */
+
     fun undo() {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded || s.history.isEmpty()) return
         val last = s.history.last()
         val freedDelta = if (last.direction == SwipeDirection.LEFT) -last.photo.sizeBytes else 0L
+
+        // Si se deshace una "conservar", también se olvida del progreso
+        // guardado — si el usuario decide borrarla en su lugar, no debe
+        // quedar marcada como conservada.
+        if (last.direction == SwipeDirection.RIGHT) {
+            currentBucketId?.let { folderProgressManager.removeKeptId(it, last.photo.id) }
+        }
 
         _state.value = s.copy(
             currentIndex = (s.currentIndex - 1).coerceAtLeast(0),
