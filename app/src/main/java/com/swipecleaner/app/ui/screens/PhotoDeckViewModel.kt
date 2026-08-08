@@ -27,7 +27,11 @@ sealed interface PhotoDeckState {
         val confirmedCount: Int = 0,
         val confirmedBytes: Long = 0L,
         val corruptedPhotos: List<PhotoItem> = emptyList(),
-        val remainingSwipesToday: Int = DAILY_SWIPE_LIMIT
+        val remainingSwipesToday: Int = DAILY_SWIPE_LIMIT,
+        // Cuántas fotos tiene la carpeta en total (antes de filtrar las ya
+        // "conservadas" en visitas anteriores). Sirve para distinguir "esta
+        // carpeta no tiene fotos" de "ya revisaste todas las de esta carpeta".
+        val totalPhotosInFolder: Int = 0
     ) : PhotoDeckState {
         val trashCandidates: List<PhotoItem>
             get() = history.filter { it.direction == SwipeDirection.LEFT }.map { it.photo }
@@ -48,10 +52,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadPhotos(bucketId: String) {
         if (currentBucketId == bucketId && _state.value is PhotoDeckState.Loaded) {
-            // Ya estaba cargada esta carpeta — igual refresca el cupo de
-            // swipes, por si el usuario se desbloqueó mientras estaba en
-            // otra pantalla (ej. "Acerca de"). Evita tener que reiniciar
-            // la app para que el desbloqueo surta efecto.
             val current = _state.value as PhotoDeckState.Loaded
             _state.value = current.copy(remainingSwipesToday = swipeLimitManager.remaining())
             return
@@ -61,13 +61,12 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 val allPhotos = repository.getPhotosInFolder(bucketId)
-                // Retoma el progreso: excluye fotos ya marcadas "conservar"
-                // en visitas anteriores a esta carpeta.
                 val keptIds = folderProgressManager.getKeptIds(bucketId)
                 val photos = allPhotos.filterNot { it.id in keptIds }
                 _state.value = PhotoDeckState.Loaded(
                     photos = photos,
-                    remainingSwipesToday = swipeLimitManager.remaining()
+                    remainingSwipesToday = swipeLimitManager.remaining(),
+                    totalPhotosInFolder = allPhotos.size
                 )
                 scanForCorruptedFiles(photos)
             } catch (e: Exception) {
@@ -76,10 +75,10 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** "Ver desde el principio" — olvida el progreso guardado y recarga todo. */
+    /** "Ver desde el principio" / "Revisar de nuevo" — olvida el progreso guardado y recarga todo. */
     fun resetFolderProgress(bucketId: String) {
         folderProgressManager.resetFolder(bucketId)
-        currentBucketId = null // fuerza una recarga completa, ignorando el caché de "ya cargada"
+        currentBucketId = null
         loadPhotos(bucketId)
     }
 
@@ -116,8 +115,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         val freedDelta = if (direction == SwipeDirection.LEFT) photo.sizeBytes else 0L
         swipeLimitManager.registerSwipe()
 
-        // Recuerda las "conservadas" para no volver a mostrarlas en la
-        // próxima visita a esta carpeta.
         if (direction == SwipeDirection.RIGHT) {
             currentBucketId?.let { folderProgressManager.addKeptId(it, photo.id) }
         }
@@ -136,9 +133,6 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
         val last = s.history.last()
         val freedDelta = if (last.direction == SwipeDirection.LEFT) -last.photo.sizeBytes else 0L
 
-        // Si se deshace una "conservar", también se olvida del progreso
-        // guardado — si el usuario decide borrarla en su lugar, no debe
-        // quedar marcada como conservada.
         if (last.direction == SwipeDirection.RIGHT) {
             currentBucketId?.let { folderProgressManager.removeKeptId(it, last.photo.id) }
         }
