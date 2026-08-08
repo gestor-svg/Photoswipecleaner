@@ -269,8 +269,12 @@ fun PhotoDeckScreen(
                                     onBack = onBack
                                 )
                             } else if (index >= photos.size) {
-                                if (photos.isEmpty()) {
+                                if (photos.isEmpty() && s.totalPhotosInFolder == 0) {
                                     Text("Esta carpeta no tiene fotos")
+                                } else if (photos.isEmpty() && s.totalPhotosInFolder > 0) {
+                                    AlreadyReviewedView(
+                                        onReviewAgain = { viewModel.resetFolderProgress(folder.bucketId) }
+                                    )
                                 } else {
                                     DeckSummary(
                                         state = s,
@@ -530,8 +534,41 @@ private fun ActionPillButton(symbol: String, label: String, tint: Color, onClick
 }
 
 /**
- * Pantalla de límite diario alcanzado (2d), con frase de humor y conteo
- * regresivo en vivo contra la hora exacta de reset (23:59:59 de hoy).
+ * Pantalla que se muestra cuando ya se revisaron todas las fotos de la
+ * carpeta en visitas anteriores (photos vacío pero totalPhotosInFolder > 0)
+ * — distinta de "esta carpeta no tiene fotos".
+ */
+@Composable
+private fun AlreadyReviewedView(onReviewAgain: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(24.dp).fillMaxWidth()
+    ) {
+        Text(
+            "Esta carpeta ya la revisaste",
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Las fotos que marcaste como conservar aquí están, no se borran.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 280.dp)
+        )
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onReviewAgain) {
+            Text("Revisar de nuevo")
+        }
+    }
+}
+
+/**
+ * Pantalla de límite alcanzado (2d), con frase de humor y conteo regresivo
+ * en vivo contra la hora exacta de reset. Desde esta sesión el cupo es
+ * 30/hora (antes era 30/día), así que el conteo regresivo casi siempre
+ * muestra minutos, rara vez horas — el label se ajusta según corresponda.
  */
 @Composable
 private fun LimitReachedView(
@@ -549,12 +586,13 @@ private fun LimitReachedView(
     LaunchedEffect(Unit) {
         while (true) {
             remainingMillis = (swipeLimitManager.resetAtMillis() - System.currentTimeMillis()).coerceAtLeast(0)
-            delay(60_000)
+            delay(30_000)
         }
     }
     val totalMinutes = (remainingMillis / 60_000).toInt()
     val hh = totalMinutes / 60
     val mm = totalMinutes % 60
+    val waitLabel = if (hh > 0) "⏱ Esperar ${hh}h ${mm}m" else "⏱ Esperar ${mm}m"
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -570,7 +608,7 @@ private fun LimitReachedView(
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Se acabaron tus swipes de hoy",
+            "Se acabaron tus swipes de esta hora",
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center
         )
@@ -607,7 +645,7 @@ private fun LimitReachedView(
             modifier = Modifier.fillMaxWidth(0.9f).height(52.dp),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text("⏱ Esperar ${hh}h ${mm}m")
+            Text(waitLabel)
         }
     }
 }
