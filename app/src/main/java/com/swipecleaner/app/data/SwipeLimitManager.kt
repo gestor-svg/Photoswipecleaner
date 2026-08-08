@@ -2,18 +2,18 @@ package com.swipecleaner.app.data
 
 import android.content.Context
 import java.security.MessageDigest
-import java.text.SimpleDateFormat
 import java.time.YearMonth
-import java.util.Date
-import java.util.Locale
 
 private const val PREFS_NAME = "swipe_limit_prefs"
-private const val KEY_DATE = "date"
+private const val KEY_HOUR_BUCKET = "hour_bucket"
 private const val KEY_COUNT = "count"
 private const val KEY_MASTER_UNLOCKED = "master_unlocked"
 private const val KEY_TIER1_EXPIRY = "tier1_expiry_millis"
 
+/** Límite gratuito: 30 swipes por hora (antes era por día). */
 const val DAILY_SWIPE_LIMIT = 30
+private const val MS_PER_HOUR = 60L * 60L * 1000L
+
 private const val TIER1_DURATION_DAYS = 90L
 private const val TIER1_DURATION_MILLIS = TIER1_DURATION_DAYS * 24 * 60 * 60 * 1000
 
@@ -34,33 +34,50 @@ private const val MASTER_CODE_HASH = "94fbc13a5b22b6fd28d7687ef05810269d158007f0
 private const val TIER1_SECRET = "millonario"
 
 /**
- * Contador global (no por carpeta) de swipes diarios, para el límite
- * gratuito de 30/día — y desbloqueo permanente (código maestro) o temporal
+ * Contador global (no por carpeta) de swipes por hora, para el límite
+ * gratuito de 30/hora — y desbloqueo permanente (código maestro) o temporal
  * de 90 días (código mensual de Tier 1). Todo persistido en
  * SharedPreferences, honor system, consistente con el resto del proyecto.
+ *
+ * Cambio de esta sesión: antes el cupo era 30/día (reset a medianoche),
+ * ahora es 30/hora (reset cada vez que cambia la hora en punto) — motivo:
+ * el cupo diario se sentía demasiado restrictivo, se agotaba rápido y no
+ * dejaba seguir usando la app en el mismo día.
  */
 class SwipeLimitManager(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
-    private fun today(): String = dateFormat.format(Date())
+    /** Identificador único de la hora actual (cambia cada hora en punto). */
+    private fun currentHourBucket(): Long = System.currentTimeMillis() / MS_PER_HOUR
 
-    fun getTodayCount(): Int {
-        val storedDate = prefs.getString(KEY_DATE, null)
-        return if (storedDate == today()) prefs.getInt(KEY_COUNT, 0) else 0
+    fun getCurrentWindowCount(): Int {
+        val storedBucket = prefs.getLong(KEY_HOUR_BUCKET, -1L)
+        return if (storedBucket == currentHourBucket()) prefs.getInt(KEY_COUNT, 0) else 0
     }
 
     /**
-     * Timestamp (millis) de 23:59:59 del día actual — hora exacta en la que
-     * el cupo diario vuelve a estar disponible (en cuanto cambia la fecha).
-     * Se usa solo para el conteo regresivo visual de la pantalla de límite
-     * alcanzado, no para la lógica de reset en sí (que ya funciona por
-     * comparación de fecha string, independiente de esto).
+     * Timestamp (millis) del inicio de la siguiente hora — momento exacto
+     * en el que el cupo vuelve a estar disponible. Se usa solo para el
+     * conteo regresivo visual de la pantalla de límite alcanzado.
      */
     fun resetAtMillis(): Long {
-        val now = java.time.LocalDateTime.now()
-        val endOfDay = now.toLocalDate().atTime(23, 59, 59)
-        return endOfDay.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val currentHourStart = (System.currentTimeMillis() / MS_PER_HOUR) * MS_PER_HOUR
+        return currentHourStart + MS_PER_HOUR
+    }
+
+    /** Swipes restantes esta hora. Ilimitado si hay código maestro o Tier 1 activo. */
+    fun remaining(): Int {
+        if (isMasterUnlocked() || isTier1Active()) return Int.MAX_VALUE
+        return (DAILY_SWIPE_LIMIT - getCurrentWindowCount()).coerceAtLeast(0)
+    }
+
+    fun registerSwipe(): Int {
+        val updated = getCurrentWindowCount() + 1
+        prefs.edit()
+            .putLong(KEY_HOUR_BUCKET, currentHourBucket())
+            .putInt(KEY_COUNT, updated)
+            .apply()
+        return updated
     }
 
     fun isMasterUnlocked(): Boolean = prefs.getBoolean(KEY_MASTER_UNLOCKED, false)
@@ -72,21 +89,6 @@ class SwipeLimitManager(context: Context) {
         val diff = prefs.getLong(KEY_TIER1_EXPIRY, 0L) - System.currentTimeMillis()
         if (diff <= 0) return 0
         return (diff / (24 * 60 * 60 * 1000)).toInt() + 1
-    }
-
-    /** Swipes restantes hoy. Ilimitado si hay código maestro o Tier 1 activo. */
-    fun remaining(): Int {
-        if (isMasterUnlocked() || isTier1Active()) return Int.MAX_VALUE
-        return (DAILY_SWIPE_LIMIT - getTodayCount()).coerceAtLeast(0)
-    }
-
-    fun registerSwipe(): Int {
-        val updated = getTodayCount() + 1
-        prefs.edit()
-            .putString(KEY_DATE, today())
-            .putInt(KEY_COUNT, updated)
-            .apply()
-        return updated
     }
 
     /**
