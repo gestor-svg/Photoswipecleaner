@@ -58,6 +58,14 @@ fun PhotoDeckScreen(
     val loaded = state as? PhotoDeckState.Loaded
     val context = LocalContext.current
 
+    fun openDonatePage() {
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://gestor-svg.github.io/Photoswipecleaner/donar.html")
+        )
+        context.startActivity(intent)
+    }
+
     // Snapshot del lote que se está confirmando — se captura al momento de
     // confirmar porque el estado (freedBytes/history) se limpia apenas
     // termina el envío, y el snackbar necesita esos números después.
@@ -268,6 +276,17 @@ fun PhotoDeckScreen(
                                     },
                                     onBack = onBack
                                 )
+                            } else if (s.showDonateCard) {
+                                // Tarjeta interstitial de donar — mismo tamaño/posición
+                                // que la tarjeta de foto real, pero sin gesto de swipe.
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.78f)
+                                        .aspectRatio(0.9f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    DonateInterstitialCard()
+                                }
                             } else if (index >= photos.size) {
                                 if (photos.isEmpty() && s.totalPhotosInFolder == 0) {
                                     Text("Esta carpeta no tiene fotos")
@@ -356,7 +375,11 @@ fun PhotoDeckScreen(
                     }
                 }
 
-                if (loaded != null && loaded.remainingSwipesToday > 0 && loaded.currentIndex < loaded.photos.size) {
+                val showActionRow = loaded != null &&
+                    loaded.remainingSwipesToday > 0 &&
+                    (loaded.currentIndex < loaded.photos.size || loaded.showDonateCard)
+
+                if (showActionRow && loaded != null) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -366,7 +389,7 @@ fun PhotoDeckScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             UndoCircleButton(
-                                enabled = loaded.history.isNotEmpty(),
+                                enabled = !loaded.showDonateCard && loaded.history.isNotEmpty(),
                                 onClick = { viewModel.undo() }
                             )
                             ActionPillButton(
@@ -374,8 +397,12 @@ fun PhotoDeckScreen(
                                 label = "Borrar",
                                 tint = PsColor.Orange,
                                 onClick = {
-                                    manualSwipeCounter++
-                                    manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
+                                    if (loaded.showDonateCard) {
+                                        viewModel.dismissDonateCard()
+                                    } else {
+                                        manualSwipeCounter++
+                                        manualSwipe = ManualSwipeRequest(SwipeDecision.LEFT, manualSwipeCounter)
+                                    }
                                 }
                             )
                             ActionPillButton(
@@ -383,14 +410,19 @@ fun PhotoDeckScreen(
                                 label = "Conservar",
                                 tint = PsColor.Green,
                                 onClick = {
-                                    manualSwipeCounter++
-                                    manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
+                                    if (loaded.showDonateCard) {
+                                        viewModel.dismissDonateCard()
+                                        openDonatePage()
+                                    } else {
+                                        manualSwipeCounter++
+                                        manualSwipe = ManualSwipeRequest(SwipeDecision.RIGHT, manualSwipeCounter)
+                                    }
                                 }
                             )
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Deshacer última acción",
+                            if (loaded.showDonateCard) "✕ para seguir · ✓ para donar" else "Deshacer última acción",
                             style = PsTextStyle.Caption,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
                         )
@@ -403,6 +435,43 @@ fun PhotoDeckScreen(
             ResultSnackbar(
                 data = data,
                 modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+/**
+ * Tarjeta interstitial de donar — no es una foto real, se intercala en el
+ * mazo. No es deslizable a propósito (sin SwipeableCard): solo se descarta
+ * con los botones ✕ (seguir) o ✓ (ir a donar), reutilizando la misma fila
+ * de botones que ya existe para las fotos reales.
+ */
+@Composable
+private fun DonateInterstitialCard() {
+    Card(
+        shape = RoundedCornerShape(PsRadius.PhotoCard),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier.size(72.dp).background(PsColor.GradDonate, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("💛", style = MaterialTheme.typography.headlineMedium)
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Una pausa rápida", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Si te está sirviendo la app, considera apoyarla. Toca ✓ para donar, o ✕ para seguir viendo tus fotos.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -566,9 +635,8 @@ private fun AlreadyReviewedView(onReviewAgain: () -> Unit) {
 
 /**
  * Pantalla de límite alcanzado (2d), con frase de humor y conteo regresivo
- * en vivo contra la hora exacta de reset. Desde esta sesión el cupo es
- * 30/hora (antes era 30/día), así que el conteo regresivo casi siempre
- * muestra minutos, rara vez horas — el label se ajusta según corresponda.
+ * en vivo contra la hora exacta de reset. El cupo es 30/hora, así que el
+ * conteo regresivo casi siempre muestra minutos, rara vez horas.
  */
 @Composable
 private fun LimitReachedView(

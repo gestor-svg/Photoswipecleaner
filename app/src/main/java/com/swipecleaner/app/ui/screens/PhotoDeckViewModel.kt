@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 sealed interface PhotoDeckState {
     data object Loading : PhotoDeckState
@@ -28,10 +29,10 @@ sealed interface PhotoDeckState {
         val confirmedBytes: Long = 0L,
         val corruptedPhotos: List<PhotoItem> = emptyList(),
         val remainingSwipesToday: Int = DAILY_SWIPE_LIMIT,
-        // Cuántas fotos tiene la carpeta en total (antes de filtrar las ya
-        // "conservadas" en visitas anteriores). Sirve para distinguir "esta
-        // carpeta no tiene fotos" de "ya revisaste todas las de esta carpeta".
-        val totalPhotosInFolder: Int = 0
+        val totalPhotosInFolder: Int = 0,
+        // Tarjeta interstitial de donar — no corresponde a ninguna foto real,
+        // aparece de forma intercalada en el mazo cada cierto número de swipes.
+        val showDonateCard: Boolean = false
     ) : PhotoDeckState {
         val trashCandidates: List<PhotoItem>
             get() = history.filter { it.direction == SwipeDirection.LEFT }.map { it.photo }
@@ -49,6 +50,24 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     val state: StateFlow<PhotoDeckState> = _state.asStateFlow()
 
     private var currentBucketId: String? = null
+
+    // Control de la tarjeta de donar: cuenta swipes reales desde la última
+    // aparición, comparado contra un umbral aleatorio. Vive como estado de
+    // instancia (no persistido) a propósito — el rango se cuenta "desde que
+    // abres la app", y como este ViewModel se reutiliza mientras la app
+    // sigue abierta (aunque cambies de carpeta), se reinicia solo al volver
+    // a abrir la app desde cero.
+    private var swipesSinceLastDonateCard = 0
+    private var donateCardThreshold = randomDonateThreshold()
+
+    private fun randomDonateThreshold(): Int {
+        val unlocked = swipeLimitManager.isMasterUnlocked() || swipeLimitManager.isTier1Active()
+        return if (unlocked) {
+            Random.nextInt(40, 71) // 40..70 inclusive, menos seguido si ya está desbloqueado
+        } else {
+            Random.nextInt(1, DAILY_SWIPE_LIMIT + 1) // 1..30 inclusive
+        }
+    }
 
     fun loadPhotos(bucketId: String) {
         if (currentBucketId == bucketId && _state.value is PhotoDeckState.Loaded) {
@@ -108,6 +127,7 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
     fun onSwipe(direction: SwipeDirection) {
         val s = _state.value
         if (s !is PhotoDeckState.Loaded) return
+        if (s.showDonateCard) return // no se puede deslizar una foto real mientras la tarjeta de donar está encima
         if (s.remainingSwipesToday <= 0) return
 
         val photo = s.photos.getOrNull(s.currentIndex) ?: return
@@ -119,10 +139,34 @@ class PhotoDeckViewModel(application: Application) : AndroidViewModel(applicatio
             currentBucketId?.let { folderProgressManager.addKeptId(it, photo.id) }
         }
 
+        swipesSinceLastDonateCard++
+        val shouldShowDonateCard = swipesSinceLastDonateCard >= donateCardThreshold
+
         _state.value = s.copy(
             currentIndex = s.currentIndex + 1,
             history = s.history + result,
             freedBytes = s.freedBytes + freedDelta,
+            remainingSwipesToday = swipeLimitManager.remaining(),
+            showDonateCard = shouldShowDonateCard
+        )
+    }
+
+    /**
+     * Descarta la tarjeta de donar (con ✕ o con ✓, ambos casos). Cuenta
+     * como un swipe del cupo — la tarjeta "ocupa un lugar" en el mazo,
+     * igual que una foto real. Reinicia el conteo y sortea un nuevo umbral
+     * para la siguiente aparición.
+     */
+    fun dismissDonateCard() {
+        val s = _state.value
+        if (s !is PhotoDeckState.Loaded || !s.showDonateCard) return
+
+        swipeLimitManager.registerSwipe()
+        swipesSinceLastDonateCard = 0
+        donateCardThreshold = randomDonateThreshold()
+
+        _state.value = s.copy(
+            showDonateCard = false,
             remainingSwipesToday = swipeLimitManager.remaining()
         )
     }
