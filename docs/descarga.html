@@ -45,14 +45,33 @@
     border-radius: 12px;
     font-size: 1rem;
   }
-  .filesize { color: var(--text-muted); font-size: 0.8rem; margin-top: 8px; }
+  .filesize { color: var(--text-muted); font-size: 0.8rem; margin-top: 8px; margin-bottom: 18px; }
+
+  .trust-card {
+    background: rgba(127, 174, 106, 0.1);
+    border: 1px solid rgba(127, 174, 106, 0.35);
+    border-radius: 14px;
+    padding: 16px 18px;
+    text-align: left;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .trust-card .emoji { font-size: 1.3rem; line-height: 1; margin-top: 1px; }
+  .trust-card p {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .trust-card a { color: var(--accent); font-weight: 600; }
 
   .steps {
     text-align: left;
     background: var(--card);
     border-radius: 14px;
     padding: 18px 20px;
-    margin-top: 28px;
+    margin-top: 20px;
     font-size: 0.85rem;
     color: var(--text-muted);
     line-height: 1.7;
@@ -74,6 +93,19 @@
     border: 1px solid var(--accent);
   }
 
+  .about-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-top: 20px;
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .about-card h2 { color: var(--text); font-size: 0.95rem; margin: 0 0 8px; }
+  .about-card a { color: var(--text-muted); }
+
   .note {
     color: var(--text-muted);
     font-size: 0.78rem;
@@ -94,6 +126,16 @@
     </a>
     <div class="filesize">Android 8.0 o superior · ~10 MB</div>
 
+    <div class="trust-card">
+      <span class="emoji">🔒</span>
+      <p>
+        PhotoSwipeCleaner no tiene rastreadores ni recolecta datos —
+        todo el código es público en
+        <a href="https://github.com/gestor-svg/PhotoSwipeCleaner">GitHub</a>,
+        donde puede ser auditado y revisado por cualquiera.
+      </p>
+    </div>
+
     <div class="steps">
       <h2>Cómo instalarla</h2>
       1. Descarga el archivo con el botón de arriba<br>
@@ -102,17 +144,23 @@
       4. Abre la app y dale acceso a tus fotos
     </div>
 
+    <div class="about-card">
+      <h2>Sobre este proyecto</h2>
+      Este es un proyecto casero y funcional, hecho por alguien interesado
+      en aprender y crear herramientas útiles con ayuda de IA — no es un
+      producto de una empresa. Es, además, el primer proyecto del mundo
+      bajo la filosofía <strong>Nagejikasen</strong> —
+      <a href="filosofia.html">¿qué es esto?</a><br><br>
+      Si tienes dudas, comentarios, o algo no funciona como debería,
+      escríbeme a
+      <a href="mailto:gestor@marcasegura.com.mx">gestor@marcasegura.com.mx</a>.
+    </div>
+
     <div class="donate-card">
       <h2>¿Ya la probaste y te gustó? 💛</h2>
       <p>Cualquier donación te desbloquea 90 días de swipes ilimitados.</p>
       <a class="button secondary" href="donar.html">Apoyar el proyecto</a>
     </div>
-
-    <p class="note">
-      PhotoSwipeCleaner no tiene rastreadores ni recolecta datos — todo el
-      código es público en
-      <a href="https://github.com/gestor-svg/PhotoSwipeCleaner">GitHub</a>.
-    </p>
 
     <p class="note" style="margin-top: 18px;">
       💛 App dedicada a Naye — gracias amor por fomentar las ideas locas de un soñador.

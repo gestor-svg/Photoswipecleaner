@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nagejikasen · Filosofía del proyecto</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --accent: #7FAE6A;
+    --text: #f2f2f2;
+    --text-muted: #a3a8b3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+    min-height: 100vh;
+  }
+  .container { max-width: 440px; width: 100%; }
+  .back {
+    display: inline-block;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+  }
+  .kanji {
+    font-size: 2.6rem;
+    text-align: center;
+    margin: 0 0 4px;
+    letter-spacing: 0.05em;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    margin: 0 0 6px;
+  }
+  p.subtitle {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0 0 32px;
+  }
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 10px; }
+  .card p { font-size: 0.9rem; line-height: 1.65; color: var(--text); margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  .breakdown-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    align-items: flex-start;
+  }
+  .breakdown-item:last-child { margin-bottom: 0; }
+  .breakdown-kanji {
+    font-size: 1.3rem;
+    min-width: 70px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .breakdown-text { font-size: 0.88rem; line-height: 1.55; color: var(--text-muted); }
+  .breakdown-text strong { color: var(--text); }
+
+  .definition {
+    background: rgba(127, 174, 106, 0.1);
+    border: 1px solid rgba(127, 174, 106, 0.35);
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  .footer-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-top: 28px;
+    line-height: 1.5;
+  }
+  .footer-note a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="container">
+    <a class="back" href="descarga.html">← Volver</a>
+
+    <div class="kanji">ナゲジカセン</div>
+    <h1>Nagejikasen</h1>
+    <p class="subtitle">La filosofía detrás de PhotoSwipeCleaner</p>
+
+    <div class="definition">
+      🥇 <strong>PhotoSwipeCleaner es el primer proyecto del mundo</strong>
+      creado bajo esta filosofía: software artesanal, autónomo, y
+      sostenido únicamente por quienes eligen apoyarlo.
+    </div>
+
+    <div class="card">
+      <h2>¿Qué significa?</h2>
+      <p>
+        Literalmente: <strong>"Aportación voluntaria por una creación
+        casera y autónoma"</strong> — el resultado de fusionar la cultura
+        de la propina con el desarrollo artesanal de software.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>El término, descompuesto</h2>
+      <div class="breakdown-item">
+        <div class="breakdown-kanji">投げ<br>Nage</div>
+        <div class="breakdown-text">
+          De <strong>Nageseni</strong>, la tradición de lanzar una moneda
+          como agradecimiento o propina voluntaria a un artista o creador.
+        </div>
+      </div>
+      <div class="breakdown-item">
+        <div class="breakdown-kanji">自家<br>Jika</div>
+        <div class="breakdown-text">
+          Doble sentido entre <strong>Jikasei</strong> (自家製, hecho en
+          casa / artesanal) y <strong>Jikanketsu</strong> (自完,
+          autocontenido, sin necesidad de infraestructura en la nube).
+        </div>
+      </div>
+      <div class="breakdown-item">
+        <div class="breakdown-kanji">銭<br>Sen</div>
+        <div class="breakdown-text">
+          Moneda — una pequeña aportación económica o valor simbólico.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>En la práctica</h2>
+      <p>
+        Una app creada de forma independiente, que corre de manera local
+        en el dispositivo del usuario, libre de servidores o gastos
+        operativos — y sostenida éticamente solo por las donaciones de
+        quienes la valoran.
+      </p>
+      <p>
+        Nada de suscripciones forzadas, nada de datos vendidos a
+        terceros, nada de anuncios. Si te sirve, decides tú cuánto vale
+        eso para ti.
+      </p>
+    </div>
+
+    <p class="footer-note">
+      💛 App dedicada a Naye — gracias amor por fomentar las ideas locas de un soñador.
+    </p>
+  </div>
+</body>
+</html>
